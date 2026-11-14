@@ -5,12 +5,20 @@ import 'package:flutter/services.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 
-/// Mixer under the waveforms: taller EQ/filter faders and the xfader. Not shown
-/// in external mixer mode; library/settings live in the deck rails.
+/// Mixer under the waveforms: EQ/filter faders per deck and the crossfader,
+/// in rbxport's neutral mixer style. Not shown in external mixer mode;
+/// library/settings live in the deck rails.
 class MixerStrip extends StatelessWidget {
   const MixerStrip({super.key, required this.controller});
 
   final DjController controller;
+
+  static const _label = TextStyle(
+    fontSize: 9,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.8,
+    color: SideDeckTheme.deckDim,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -18,14 +26,16 @@ class MixerStrip extends StatelessWidget {
     final b = controller.deckB;
 
     return ColoredBox(
-      color: SideDeckTheme.panel,
+      color: SideDeckTheme.deckRow,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
+        padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
         child: Row(
           children: [
-            Expanded(flex: 5, child: _eqBlock(0, a, SideDeckTheme.accentA)),
+            Expanded(flex: 5, child: _eqBlock(0, a)),
+            const SizedBox(width: 12),
             Expanded(flex: 6, child: _center()),
-            Expanded(flex: 5, child: _eqBlock(1, b, SideDeckTheme.accentB)),
+            const SizedBox(width: 12),
+            Expanded(flex: 5, child: _eqBlock(1, b)),
           ],
         ),
       ),
@@ -36,46 +46,60 @@ class MixerStrip extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 8),
-        const Text(
-          'CROSSFADER',
-          style: TextStyle(
-            fontSize: 9,
-            letterSpacing: 1.2,
-            color: SideDeckTheme.muted,
-          ),
-        ),
+        const Text('CROSSFADER', style: _label),
         Expanded(
-          child: SliderTheme(
-            data: const SliderThemeData(
-              trackHeight: 8,
-              thumbShape: RoundSliderThumbShape(enabledThumbRadius: 11),
-            ),
-            child: CenterDetentSlider(
-              value: controller.xfader,
-              onChanged: controller.setXfader,
-            ),
+          child: Row(
+            children: [
+              _deckTag(0),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _fader(
+                  value: controller.xfader,
+                  min: 0,
+                  max: 1,
+                  onChanged: controller.setXfader,
+                  thumbLength: 14,
+                  thumbWidth: 34,
+                ),
+              ),
+              const SizedBox(width: 8),
+              _deckTag(1),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _eqBlock(int deck, DeckState d, Color accent) {
-    return Row(
-      children: [
-        Expanded(
-          child: _vSlider('LOW', d.eqLow, -12, 12, accent, (v) => controller.setEq(deck, low: v)),
-        ),
-        Expanded(
-          child: _vSlider('MID', d.eqMid, -12, 12, accent, (v) => controller.setEq(deck, mid: v)),
-        ),
-        Expanded(
-          child: _vSlider('HIGH', d.eqHigh, -12, 12, accent, (v) => controller.setEq(deck, high: v)),
-        ),
-        Expanded(
-          child: _vSlider('FILT', d.filter, -1, 1, accent, (v) => controller.setFilter(deck, v)),
-        ),
-      ],
+  Widget _deckTag(int deck) {
+    return Container(
+      width: 18,
+      height: 14,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: deck == 0 ? SideDeckTheme.accentA : SideDeckTheme.accentB,
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Text(
+        deck == 0 ? 'A' : 'B',
+        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+      ),
+    );
+  }
+
+  Widget _eqBlock(int deck, DeckState d) {
+    // Deck A's block sits under deck A's rail tag and B's on the far side, so
+    // the crossfader's end tags are the only A/B marks the strip needs.
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(child: _vSlider('LOW', d.eqLow, -12, 12, (v) => controller.setEq(deck, low: v))),
+          Expanded(child: _vSlider('MID', d.eqMid, -12, 12, (v) => controller.setEq(deck, mid: v))),
+          Expanded(child: _vSlider('HIGH', d.eqHigh, -12, 12, (v) => controller.setEq(deck, high: v))),
+          Expanded(child: _vSlider('FILT', d.filter, -1, 1, (v) => controller.setFilter(deck, v))),
+        ],
+      ),
     );
   }
 
@@ -84,7 +108,6 @@ class MixerStrip extends StatelessWidget {
     double value,
     double min,
     double max,
-    Color accent,
     ValueChanged<double> onChanged,
   ) {
     return Column(
@@ -92,29 +115,122 @@ class MixerStrip extends StatelessWidget {
         Expanded(
           child: RotatedBox(
             quarterTurns: 3,
-            child: SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 5,
-                thumbColor: accent,
-                activeTrackColor: accent,
-                inactiveTrackColor: SideDeckTheme.panelAlt,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
-                overlayShape: SliderComponentShape.noOverlay,
-              ),
-              child: CenterDetentSlider(
-                value: value.clamp(min, max),
-                min: min,
-                max: max,
-                onChanged: onChanged,
-              ),
-            ),
+            child: _fader(value: value, min: min, max: max, onChanged: onChanged),
           ),
         ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 9, color: SideDeckTheme.muted, letterSpacing: 0.3),
-        ),
+        const SizedBox(height: 2),
+        Text(label, style: _label),
       ],
+    );
+  }
+
+  /// Horizontal fader; vertical ones are rotated. [thumbLength] runs along the
+  /// rail, [thumbWidth] across it.
+  Widget _fader({
+    required double value,
+    required double min,
+    required double max,
+    required ValueChanged<double> onChanged,
+    double thumbLength = 12,
+    double thumbWidth = 26,
+  }) {
+    return SliderTheme(
+      data: SliderThemeData(
+        trackHeight: 3,
+        trackShape: const _CenterFillTrack(),
+        thumbShape: _FaderThumb(length: thumbLength, width: thumbWidth),
+        overlayShape: SliderComponentShape.noOverlay,
+      ),
+      child: CenterDetentSlider(
+        value: value.clamp(min, max),
+        min: min,
+        max: max,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// rbxport-style rail (#323232) with a centre notch; the stretch between the
+/// centre and the thumb is filled blue so any move away from flat shows.
+class _CenterFillTrack extends SliderTrackShape with BaseSliderTrackShape {
+  const _CenterFillTrack();
+
+  static const _rail = Color(0xFF323232);
+  static const _notch = Color(0xFF8A8A8A);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required TextDirection textDirection,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isDiscrete = false,
+    bool isEnabled = false,
+  }) {
+    final rect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    final canvas = context.canvas;
+    canvas.drawRect(rect, Paint()..color = _rail);
+    final cx = rect.center.dx;
+    final x0 = thumbCenter.dx < cx ? thumbCenter.dx : cx;
+    final x1 = thumbCenter.dx < cx ? cx : thumbCenter.dx;
+    if (x1 - x0 > 0.5) {
+      canvas.drawRect(
+        Rect.fromLTRB(x0, rect.top, x1, rect.bottom),
+        Paint()..color = SideDeckTheme.deckLit,
+      );
+    }
+    canvas.drawRect(
+      Rect.fromCenter(center: rect.center, width: 1.5, height: rect.height + 10),
+      Paint()..color = _notch,
+    );
+  }
+}
+
+/// Flat fader cap: #646464 block, 2 px corners, light centre line.
+class _FaderThumb extends SliderComponentShape {
+  const _FaderThumb({required this.length, required this.width});
+
+  final double length;
+  final double width;
+
+  @override
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => Size(length, width);
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset center, {
+    required Animation<double> activationAnimation,
+    required Animation<double> enableAnimation,
+    required bool isDiscrete,
+    required TextPainter labelPainter,
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required TextDirection textDirection,
+    required double value,
+    required double textScaleFactor,
+    required Size sizeWithOverflow,
+  }) {
+    final canvas = context.canvas;
+    final body = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: length, height: width),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(body, Paint()..color = SideDeckTheme.deckOutline);
+    canvas.drawRect(
+      Rect.fromCenter(center: center, width: 1.5, height: width - 6),
+      Paint()..color = const Color(0xFFD0D0D0),
     );
   }
 }

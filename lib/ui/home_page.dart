@@ -202,8 +202,8 @@ class _HomePageState extends State<HomePage> {
       animation: Listenable.merge([dj, library]),
       builder: (context, _) {
         return Scaffold(
-          // Match mixer so L/R (and home-indicator) safe-area gutters aren't black.
-          backgroundColor: SideDeckTheme.panel,
+          // Match the deck rails/mixer so L/R (and home-indicator) safe-area gutters blend in.
+          backgroundColor: SideDeckTheme.deckRow,
           body: SafeArea(
             child: ColoredBox(
               color: Colors.black,
