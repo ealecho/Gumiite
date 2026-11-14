@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/analysis_cache.dart';
+import 'package:sidedeck/engine/cue_store.dart';
 import 'package:sidedeck/engine/music_utils.dart' as music;
 import 'package:sidedeck/engine/music_utils.dart' show KeyNotation;
 import 'package:sidedeck/engine/native_engine.dart';
@@ -260,12 +261,49 @@ class DjController extends ChangeNotifier {
       } catch (_) {}
     }
 
+    await _restoreCues(deckIndex, path);
+
     loadingDeck = null;
     loadingTitle = null;
     loadingPath = null;
     _followMasterBpm(deckIndex);
     notifyListeners();
     return true;
+  }
+
+  /// Bring back a track's saved cues. Like a CDJ, the deck then sits on its
+  /// cue point, ready for CUE/PLAY.
+  Future<void> _restoreCues(int deckIndex, String path) async {
+    TrackCues? saved;
+    try {
+      saved = await CueStore.instance.get(path);
+    } catch (_) {
+      return;
+    }
+    final d = deck(deckIndex);
+    if (saved == null || d.path != path || !d.loaded) return;
+    for (var slot = 0; slot < d.hotCues.length && slot < saved.hotCues.length; slot++) {
+      final t = saved.hotCues[slot];
+      if (t < 0 || t >= d.duration) continue;
+      _engine.setHotcue(deckIndex, slot, t);
+      d.hotCues[slot] = t;
+    }
+    if (saved.cue > 0 && saved.cue < d.duration && !d.playing) {
+      // The engine only sets the cue at the playhead, so park there first.
+      _engine.seek(deckIndex, saved.cue);
+      _engine.setCue(deckIndex);
+      d.cuePoint = saved.cue;
+      d.position = saved.cue;
+    }
+  }
+
+  void _saveCues(int deckIndex) {
+    final d = deck(deckIndex);
+    final path = d.path;
+    if (path == null || !d.loaded) return;
+    CueStore.instance
+        .put(path, TrackCues(cue: d.cuePoint, hotCues: List.of(d.hotCues)))
+        .catchError((Object _) {});
   }
 
   /// Re-read a track that was just re-analyzed, so a deck holding it picks up
@@ -321,6 +359,7 @@ class DjController extends ChangeNotifier {
       _engine.setCue(deckIndex);
       d.cuePoint = _engine.position(deckIndex);
       d.position = d.cuePoint;
+      _saveCues(deckIndex);
     }
     notifyListeners();
   }
@@ -345,6 +384,7 @@ class DjController extends ChangeNotifier {
     if (d.hotCues[slot] < 0) {
       _engine.setHotcue(deckIndex, slot);
       d.hotCues[slot] = _engine.hotcue(deckIndex, slot);
+      _saveCues(deckIndex);
     } else {
       _engine.jumpHotcue(deckIndex, slot);
       // A playing deck applies the jump on the audio thread; show it now.
@@ -359,6 +399,7 @@ class DjController extends ChangeNotifier {
     if (!d.loaded || d.hotCues[slot] < 0) return;
     _engine.clearHotcue(deckIndex, slot);
     d.hotCues[slot] = -1;
+    _saveCues(deckIndex);
     notifyListeners();
   }
 
