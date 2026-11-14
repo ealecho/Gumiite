@@ -30,8 +30,7 @@ class WaveformPainter extends CustomPainter {
     this.loopStart = 0,
     this.loopEnd = 0,
     this.cuePoint = -1,
-    this.zoomWindowSec = 8,
-    this.showJumpZone = false,
+    this.zoomWindowSec = WaveformView.defaultZoom,
   });
 
   final WavePart part;
@@ -52,7 +51,6 @@ class WaveformPainter extends CustomPainter {
   /// Main cue point in seconds; negative hides the marker.
   final double cuePoint;
   final double zoomWindowSec;
-  final bool showJumpZone;
 
   static const overviewH = 26.0;
   static const _cue = Color(0xFFEA3323);
@@ -254,10 +252,6 @@ class WaveformPainter extends CustomPainter {
     _paintGrid(canvas, width, top, bottom, viewStart, viewDur, xForTime);
     if (cuePoint >= 0) _paintCue(canvas, width, top, bottom, xForTime(cuePoint));
 
-    if (showJumpZone) {
-      _drawJumpZone(canvas, width, top, bottom);
-    }
-
     canvas.drawRect(
       Rect.fromLTWH(width / 2 - 0.75, top, 1.5, bottom - top),
       Paint()..color = _playhead,
@@ -345,9 +339,12 @@ class WaveformPainter extends CustomPainter {
     final beatLine = Paint()..color = _beat;
     final downLine = Paint()..color = _downbeat;
     final beatHeads = Path(), downHeads = Path();
+    // Zoomed far out, beats crowd together: keep only the downbeats.
+    final barsOnly = beatSec / viewDur * width < 8;
     for (var t = beatOffset + idx * beatSec; t <= viewEnd; t += beatSec, idx++) {
       if (t < 0 || t > duration) continue;
       final down = idx % 4 == 0;
+      if (barsOnly && !down) continue;
       final x = xForTime(t).roundToDouble();
       canvas.drawRect(
         Rect.fromLTRB(x, top + headH, x + 1, bottom - headH),
@@ -369,53 +366,6 @@ class WaveformPainter extends CustomPainter {
     canvas.drawPath(downHeads, Paint()..color = _downbeatHead);
   }
 
-  static const jumpHalf = 0.14;
-
-  /// Left edge of the beat-jump hit rect; same math as [_drawJumpZone].
-  static double jumpZoneLeft(double width) => width * (0.5 - jumpHalf);
-
-  /// Right edge of the beat-jump hit rect.
-  static double jumpZoneRight(double width) => width * (0.5 + jumpHalf);
-
-  void _drawJumpZone(Canvas canvas, double width, double top, double bottom) {
-    final cx = width / 2;
-    final half = width * jumpHalf;
-    final cy = (top + bottom) / 2;
-    _chevron(canvas, Offset(cx - half * 0.55, cy), left: true);
-    _chevron(canvas, Offset(cx + half * 0.55, cy), left: false);
-    _jumpLabel(canvas, Offset(cx - half * 0.55 + 10, cy - 7), '4');
-    _jumpLabel(canvas, Offset(cx + half * 0.55 - 18, cy - 7), '4');
-  }
-
-  void _chevron(Canvas canvas, Offset c, {required bool left}) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeJoin = StrokeJoin.round;
-    final dx = left ? -6.0 : 6.0;
-    final path = Path()
-      ..moveTo(c.dx - dx, c.dy - 8)
-      ..lineTo(c.dx + dx, c.dy)
-      ..lineTo(c.dx - dx, c.dy + 8);
-    canvas.drawPath(path, paint);
-  }
-
-  void _jumpLabel(Canvas canvas, Offset o, String s) {
-    final tp = TextPainter(
-      text: TextSpan(
-        text: s,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.35),
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, o);
-  }
-
   @override
   bool shouldRepaint(covariant WaveformPainter oldDelegate) {
     return oldDelegate.part != part ||
@@ -431,7 +381,7 @@ class WaveformPainter extends CustomPainter {
         oldDelegate.loopStart != loopStart ||
         oldDelegate.loopEnd != loopEnd ||
         oldDelegate.cuePoint != cuePoint ||
-        oldDelegate.showJumpZone != showJumpZone;
+        oldDelegate.zoomWindowSec != zoomWindowSec;
   }
 }
 
@@ -452,9 +402,10 @@ class WaveformView extends StatefulWidget {
     this.loopStart = 0,
     this.loopEnd = 0,
     this.cuePoint = -1,
-    this.onSeek,
+    this.zoom = defaultZoom,
     this.onOverviewSeek,
     this.onScrub,
+    this.onZoom,
   });
 
   final WavePart part;
@@ -471,25 +422,32 @@ class WaveformView extends StatefulWidget {
   final double loopStart;
   final double loopEnd;
   final double cuePoint;
-  /// Zoomed jump-zone tap (typically ±4 beat jump toward the tap).
-  final ValueChanged<double>? onSeek;
+  /// Heard seconds across the detail; see [defaultZoom], [minZoom], [maxZoom].
+  final double zoom;
   /// Full-track overview strip tap or drag → absolute position in seconds.
   final ValueChanged<double>? onOverviewSeek;
-  /// Detail drag → absolute position in seconds, moving the track with the
-  /// finger like a record.
+  /// One-finger detail drag → absolute position in seconds, moving the track
+  /// with the finger like a record.
   final ValueChanged<double>? onScrub;
+  /// Two-finger pinch on the detail (and double-tap to reset) → new [zoom].
+  final ValueChanged<double>? onZoom;
 
-  static const zoom = 8.0;
+  static const defaultZoom = 4.0;
+  static const minZoom = 1.5;
+  static const maxZoom = 32.0;
 
   @override
   State<WaveformView> createState() => _WaveformViewState();
 }
 
 class _WaveformViewState extends State<WaveformView> {
+  // Gesture state lives here, not in the builder: the view rebuilds every
+  // tick while a finger is down.
   double _dragFrom = 0;
   double _dragDx = 0;
-  // State, not a builder local: the view rebuilds every tick mid-drag.
+  double _zoomFrom = WaveformView.defaultZoom;
   bool _dragOverview = false;
+  bool _pinching = false;
 
   bool _inOverview(double y, double h) => switch (widget.part) {
     WavePart.overview => true,
@@ -523,50 +481,58 @@ class _WaveformViewState extends State<WaveformView> {
             loopStart: w0.loopStart,
             loopEnd: w0.loopEnd,
             cuePoint: w0.cuePoint,
-            zoomWindowSec: WaveformView.zoom,
-            showJumpZone: w0.onSeek != null,
+            zoomWindowSec: w0.zoom,
           ),
           size: Size(w, h),
         );
-        final interactive =
-            w0.onSeek != null || w0.onOverviewSeek != null || w0.onScrub != null;
+        final interactive = w0.onOverviewSeek != null || w0.onScrub != null || w0.onZoom != null;
         if (!interactive || w0.duration <= 0) {
           return paint;
         }
         final playRate = w0.rate.clamp(0.5, 2.0);
         double clampT(double t) => t.clamp(0.0, w0.duration).toDouble();
-
+        void overviewSeek(Offset p) =>
+            w0.onOverviewSeek?.call((p.dx / w).clamp(0.0, 1.0) * w0.duration);
+        final canResetZoom = w0.onZoom != null && w0.part != WavePart.overview;
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          // Tap (not tap-down) so a drag never also fires a beat jump.
           onTapUp: (d) {
-            final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
-            if (_inOverview(d.localPosition.dy, h)) {
-              w0.onOverviewSeek?.call(nx * w0.duration);
-              return;
-            }
-            final onSeek = w0.onSeek;
-            if (onSeek == null) return;
-            if ((nx - 0.5).abs() > WaveformPainter.jumpHalf) return;
-            final heard = (nx - 0.5) * WaveformView.zoom;
-            onSeek(clampT(w0.position + heard * playRate));
+            if (_inOverview(d.localPosition.dy, h)) overviewSeek(d.localPosition);
           },
-          onHorizontalDragStart: (d) {
-            _dragOverview = _inOverview(d.localPosition.dy, h);
+          // Only the detail listens for double-taps, so overview taps aren't delayed.
+          onDoubleTap: canResetZoom ? () => w0.onZoom!(WaveformView.defaultZoom) : null,
+          // One scale gesture covers both: one finger scrubs, two fingers zoom.
+          onScaleStart: (d) {
+            _dragOverview = _inOverview(d.localFocalPoint.dy, h);
             _dragFrom = w0.position;
             _dragDx = 0;
+            _zoomFrom = w0.zoom;
+            _pinching = false;
           },
-          onHorizontalDragUpdate: (d) {
+          onScaleUpdate: (d) {
+            if (d.pointerCount >= 2 && !_dragOverview) {
+              final onZoom = w0.onZoom;
+              if (onZoom == null || d.horizontalScale <= 0) return;
+              _pinching = true;
+              // Fingers apart = zoom in = fewer seconds across the screen.
+              onZoom(
+                (_zoomFrom / d.horizontalScale)
+                    .clamp(WaveformView.minZoom, WaveformView.maxZoom)
+                    .toDouble(),
+              );
+              return;
+            }
+            // After a pinch, the finger left behind shouldn't start scrubbing.
+            if (_pinching) return;
             if (_dragOverview) {
-              final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
-              w0.onOverviewSeek?.call(nx * w0.duration);
+              overviewSeek(d.localFocalPoint);
               return;
             }
             final onScrub = w0.onScrub;
             if (onScrub == null) return;
-            _dragDx += d.delta.dx;
+            _dragDx += d.focalPointDelta.dx;
             // Finger right pulls earlier audio under the playhead.
-            onScrub(clampT(_dragFrom - _dragDx / w * WaveformView.zoom * playRate));
+            onScrub(clampT(_dragFrom - _dragDx / w * w0.zoom * playRate));
           },
           child: paint,
         );

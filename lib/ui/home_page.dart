@@ -8,6 +8,7 @@ import 'package:sidedeck/ui/deck_panel.dart';
 import 'package:sidedeck/ui/library_drawer.dart';
 import 'package:sidedeck/ui/mixer_strip.dart';
 import 'package:sidedeck/ui/settings_page.dart';
+import 'package:sidedeck/ui/waveform.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -21,6 +22,7 @@ class _HomePageState extends State<HomePage> {
   LibraryController? _library;
   String? _bootError;
   int? _gridEditDeck;
+  double _waveZoom = WaveformView.defaultZoom;
   bool _mixerDialogOpen = false;
   BuildContext? _mixerDialogContext;
 
@@ -249,6 +251,8 @@ class _HomePageState extends State<HomePage> {
       onLoad: _openLibrary,
       onLibrary: _openLibrary,
       onSettings: _openSettings,
+      zoom: _waveZoom,
+      onZoom: (z) => setState(() => _waveZoom = z),
     );
   }
 }

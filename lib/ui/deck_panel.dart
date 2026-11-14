@@ -20,6 +20,8 @@ class DeckPanel extends StatelessWidget {
     required this.onLoad,
     required this.onLibrary,
     required this.onSettings,
+    required this.zoom,
+    required this.onZoom,
   });
 
   final DjController controller;
@@ -29,6 +31,9 @@ class DeckPanel extends StatelessWidget {
   final VoidCallback onLoad;
   final VoidCallback onLibrary;
   final VoidCallback onSettings;
+  /// Detail zoom in heard seconds, shared by both decks so their grids match.
+  final double zoom;
+  final ValueChanged<double> onZoom;
 
   static const _railW = 60.0;
   static const _rowH = 30.0;
@@ -54,9 +59,10 @@ class DeckPanel extends StatelessWidget {
       loopStart: d.loopStart,
       loopEnd: d.loopEnd,
       cuePoint: d.loaded ? d.cuePoint : -1,
-      onSeek: d.loaded && !gridEditing ? (t) => controller.seek(index, t) : null,
+      zoom: zoom,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
       onScrub: d.loaded && !gridEditing ? (t) => controller.seekTo(index, t) : null,
+      onZoom: d.loaded && !gridEditing ? onZoom : null,
     );
 
     Widget detail = wave(WavePart.detail);

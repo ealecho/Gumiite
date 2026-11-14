@@ -309,27 +309,7 @@ class DjController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Waveform tap: jump exactly 4 beats toward the tap. No grid snap —
-  /// integer beat jumps keep relative phase.
-  void seek(int deckIndex, double seconds) {
-    final d = deck(deckIndex);
-    if (!d.loaded) return;
-
-    final target = seconds.clamp(0.0, math.max(0.0, d.duration)).toDouble();
-    if (d.bpm > 1) {
-      final dir = target.compareTo(d.position);
-      if (dir == 0) return;
-      _engine.beatJump(deckIndex, dir * 4);
-      d.position = _engine.position(deckIndex);
-      _readLoop(deckIndex);
-      notifyListeners();
-      return;
-    }
-
-    seekTo(deckIndex, target);
-  }
-
-  /// Absolute seek (overview scrub / pause nudge). Ignores beat-jump mode.
+  /// Absolute seek (waveform scrub, overview, pause nudge).
   void seekTo(int deckIndex, double seconds) {
     final d = deck(deckIndex);
     if (!d.loaded) return;
