@@ -34,6 +34,8 @@ typedef _GetKeyC = Int32 Function(Pointer<Void>, Int32);
 typedef _NudgeC = Void Function(Pointer<Void>, Int32, Float);
 typedef _SetLoopC = Void Function(Pointer<Void>, Int32, Int32, Float);
 typedef _BeatJumpC = Void Function(Pointer<Void>, Int32, Int32);
+typedef _SetHotcueC = Void Function(Pointer<Void>, Int32, Int32, Double);
+typedef _GetHotcueC = Double Function(Pointer<Void>, Int32, Int32);
 typedef _WaveBinsC = Int32 Function();
 typedef _BandColumnsC = Int32 Function(Pointer<Void>, Int32, Int32);
 typedef _BandCopyC = Int32 Function(Pointer<Void>, Int32, Int32, Pointer<Uint8>, Int32);
@@ -82,6 +84,16 @@ class NativeEngine {
       .lookupFunction<_UnloadC, void Function(Pointer<Void>, int)>('dj_unload');
   late final _play = _lib
       .lookupFunction<_PlayC, void Function(Pointer<Void>, int, int)>('dj_play');
+  late final _setHotcue = _lib
+      .lookupFunction<_SetHotcueC, void Function(Pointer<Void>, int, int, double)>(
+        'dj_set_hotcue',
+      );
+  late final _getHotcue = _lib
+      .lookupFunction<_GetHotcueC, double Function(Pointer<Void>, int, int)>('dj_get_hotcue');
+  late final _jumpHotcue = _lib
+      .lookupFunction<_BeatJumpC, void Function(Pointer<Void>, int, int)>('dj_jump_hotcue');
+  late final _clearHotcue = _lib
+      .lookupFunction<_BeatJumpC, void Function(Pointer<Void>, int, int)>('dj_clear_hotcue');
   late final _setCue = _lib
       .lookupFunction<_UnloadC, void Function(Pointer<Void>, int)>('dj_set_cue');
   late final _jumpCue = _lib
@@ -250,6 +262,15 @@ class NativeEngine {
   /// Cue point = the current playhead.
   void setCue(int deck) => _setCue(_handle, deck);
   void jumpCue(int deck) => _jumpCue(_handle, deck);
+
+  /// Hot cue slots (see [hotCueCount]); seconds < 0 stores the playhead.
+  static const hotCueCount = 4;
+  void setHotcue(int deck, int slot, [double seconds = -1]) =>
+      _setHotcue(_handle, deck, slot, seconds);
+  /// Seconds, or a negative value when the slot is empty.
+  double hotcue(int deck, int slot) => _getHotcue(_handle, deck, slot);
+  void jumpHotcue(int deck, int slot) => _jumpHotcue(_handle, deck, slot);
+  void clearHotcue(int deck, int slot) => _clearHotcue(_handle, deck, slot);
   void seek(int deck, double seconds) => _seek(_handle, deck, seconds);
   double position(int deck) => _position(_handle, deck);
   double duration(int deck) => _duration(_handle, deck);

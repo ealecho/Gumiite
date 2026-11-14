@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -31,6 +32,7 @@ class WaveformPainter extends CustomPainter {
     this.loopStart = 0,
     this.loopEnd = 0,
     this.cuePoint = -1,
+    this.hotCues = const [],
     this.zoomWindowSec = WaveformView.defaultZoom,
   });
 
@@ -51,7 +53,22 @@ class WaveformPainter extends CustomPainter {
   final double loopEnd;
   /// Main cue point in seconds; negative hides the marker.
   final double cuePoint;
+  /// Hot cue seconds per slot (A, B, C, ...); negative = empty slot.
+  final List<double> hotCues;
   final double zoomWindowSec;
+
+  /// rbxport's default "colorful" hot cue colours by slot (src/lib/hotCueColours.ts).
+  static const hotCueColours = [
+    Color(0xFFFF376F),
+    Color(0xFF45ACDB),
+    Color(0xFF7DC13D),
+    Color(0xFFAA72FF),
+    Color(0xFF30D26E),
+    Color(0xFFE0641B),
+    Color(0xFF305AFF),
+    Color(0xFFC3AF04),
+  ];
+  static String hotCueLabel(int slot) => String.fromCharCode(0x41 + slot);
 
   static const overviewH = 26.0;
   static const _cue = Color(0xFFEA3323);
@@ -162,6 +179,15 @@ class WaveformPainter extends CustomPainter {
       Paint()..color = _barPlayed,
     );
 
+    for (var i = 0; i < hotCues.length; i++) {
+      if (hotCues[i] < 0) continue;
+      final hx = (hotCues[i] / duration * width).clamp(0.0, width);
+      canvas.drawRect(
+        Rect.fromLTWH(hx, top, 7, 7),
+        Paint()..color = hotCueColours[i % hotCueColours.length],
+      );
+    }
+
     if (cuePoint >= 0) {
       final cx = (cuePoint / duration * width).clamp(0.0, width);
       canvas.drawPath(
@@ -179,6 +205,32 @@ class WaveformPainter extends CustomPainter {
       Rect.fromLTWH(x - 1, top, 2, overviewH),
       Paint()..color = _playhead,
     );
+  }
+
+  /// Hot cue marker on the detail: a faint line in the slot colour and a
+  /// lettered square badge on the deck's outer edge (rbxport's badge style).
+  void _paintHotCue(Canvas canvas, double width, double top, double bottom, double x, int slot) {
+    const size = 13.0;
+    if (x < -size || x > width + size) return;
+    final colour = hotCueColours[slot % hotCueColours.length];
+    canvas.drawRect(
+      Rect.fromLTRB(x - 0.5, top, x + 0.5, bottom),
+      Paint()..color = colour.withValues(alpha: 0.6),
+    );
+    final badgeTop = hangDown ? bottom - size - 3 : top + 3;
+    final badge = Rect.fromLTWH(x - size / 2, badgeTop, size, size);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(badge, const Radius.circular(2)),
+      Paint()..color = colour,
+    );
+    final tp = TextPainter(
+      text: TextSpan(
+        text: hotCueLabel(slot),
+        style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800, height: 1),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, badge.center - Offset(tp.width / 2, tp.height / 2));
   }
 
   /// Cue marker on the detail: a line plus a triangle on the deck's outer
@@ -251,6 +303,9 @@ class WaveformPainter extends CustomPainter {
     }
 
     _paintGrid(canvas, width, top, bottom, viewStart, viewDur, xForTime);
+    for (var i = 0; i < hotCues.length; i++) {
+      if (hotCues[i] >= 0) _paintHotCue(canvas, width, top, bottom, xForTime(hotCues[i]), i);
+    }
     if (cuePoint >= 0) _paintCue(canvas, width, top, bottom, xForTime(cuePoint));
 
     canvas.drawRect(
@@ -382,6 +437,7 @@ class WaveformPainter extends CustomPainter {
         oldDelegate.loopStart != loopStart ||
         oldDelegate.loopEnd != loopEnd ||
         oldDelegate.cuePoint != cuePoint ||
+        !listEquals(oldDelegate.hotCues, hotCues) ||
         oldDelegate.zoomWindowSec != zoomWindowSec;
   }
 }
@@ -403,6 +459,7 @@ class WaveformView extends StatefulWidget {
     this.loopStart = 0,
     this.loopEnd = 0,
     this.cuePoint = -1,
+    this.hotCues = const [],
     this.playing = false,
     this.zoom = defaultZoom,
     this.onOverviewSeek,
@@ -424,6 +481,7 @@ class WaveformView extends StatefulWidget {
   final double loopStart;
   final double loopEnd;
   final double cuePoint;
+  final List<double> hotCues;
   /// While true the view animates [position] forward between updates.
   final bool playing;
   /// Heard seconds across the detail; see [defaultZoom], [minZoom], [maxZoom].
@@ -548,6 +606,7 @@ class _WaveformViewState extends State<WaveformView> with SingleTickerProviderSt
             loopStart: w0.loopStart,
             loopEnd: w0.loopEnd,
             cuePoint: w0.cuePoint,
+            hotCues: w0.hotCues,
             zoomWindowSec: w0.zoom,
           ),
           size: Size(w, h),

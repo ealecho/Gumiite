@@ -31,6 +31,8 @@ class DeckState {
   double cuePoint = 0;
   /// Playing only while CUE is held from the cue point (CDJ cue preview).
   bool cuePreview = false;
+  /// Hot cue positions in seconds per slot (A, B, C, D); negative = empty.
+  List<double> hotCues = List.filled(NativeEngine.hotCueCount, -1);
   double beatOffset = 0;
   double gain = 1;
   double fader = 1;
@@ -220,6 +222,7 @@ class DjController extends ChangeNotifier {
     d.position = 0;
     d.cuePoint = 0;
     d.cuePreview = false;
+    d.hotCues = List.filled(NativeEngine.hotCueCount, -1); // the engine clears them on load
     d.duration = _engine.duration(deckIndex);
     d.bpm = _engine.bpm(deckIndex);
     d.key = _engine.key(deckIndex);
@@ -331,6 +334,31 @@ class DjController extends ChangeNotifier {
     _engine.jumpCue(deckIndex);
     d.playing = false;
     d.position = d.cuePoint;
+    notifyListeners();
+  }
+
+  /// Hot cue pad: an empty slot stores the playhead; a set slot jumps to it,
+  /// keeping the deck playing or paused as it was.
+  void hotCue(int deckIndex, int slot) {
+    final d = deck(deckIndex);
+    if (!d.loaded) return;
+    if (d.hotCues[slot] < 0) {
+      _engine.setHotcue(deckIndex, slot);
+      d.hotCues[slot] = _engine.hotcue(deckIndex, slot);
+    } else {
+      _engine.jumpHotcue(deckIndex, slot);
+      // A playing deck applies the jump on the audio thread; show it now.
+      d.position = d.hotCues[slot];
+      _readLoop(deckIndex);
+    }
+    notifyListeners();
+  }
+
+  void clearHotCue(int deckIndex, int slot) {
+    final d = deck(deckIndex);
+    if (!d.loaded || d.hotCues[slot] < 0) return;
+    _engine.clearHotcue(deckIndex, slot);
+    d.hotCues[slot] = -1;
     notifyListeners();
   }
 

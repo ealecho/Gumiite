@@ -59,6 +59,8 @@ class DeckPanel extends StatelessWidget {
       loopStart: d.loopStart,
       loopEnd: d.loopEnd,
       cuePoint: d.loaded ? d.cuePoint : -1,
+      // A copy, so the painter can tell when a slot changes.
+      hotCues: d.loaded ? List.of(d.hotCues) : const [],
       playing: d.playing,
       zoom: zoom,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
@@ -373,6 +375,16 @@ class DeckPanel extends StatelessWidget {
     const gap = SizedBox(width: 3);
     const groupGap = SizedBox(width: 8);
     return [
+      for (var slot = 0; slot < d.hotCues.length; slot++) ...[
+        if (slot > 0) gap,
+        _HotCuePad(
+          slot: slot,
+          set: d.hotCues[slot] >= 0,
+          onTap: () => controller.hotCue(index, slot),
+          onClear: () => controller.clearHotCue(index, slot),
+        ),
+      ],
+      groupGap,
       _DeckButton(label: '½', enabled: canHalf, onStep: () => controller.halfLoop(index)),
       gap,
       _DeckButton(
@@ -415,6 +427,51 @@ class DeckPanel extends StatelessWidget {
       _DeckButton(label: '›', onStep: () => controller.shiftGridMs(index, 5)),
       gap,
     ];
+  }
+}
+
+/// Hot cue pad in its slot colour: empty shows a coloured letter on the
+/// button grey, set is filled with a black letter. Tap sets or jumps;
+/// long-press clears.
+class _HotCuePad extends StatelessWidget {
+  const _HotCuePad({
+    required this.slot,
+    required this.set,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final int slot;
+  final bool set;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = WaveformPainter.hotCueColours[slot % WaveformPainter.hotCueColours.length];
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      onLongPress: set ? onClear : null,
+      child: Container(
+        width: 26,
+        height: 26,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: set ? colour : SideDeckTheme.deckButton,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Text(
+          WaveformPainter.hotCueLabel(slot),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            height: 1,
+            color: set ? Colors.black : colour,
+          ),
+        ),
+      ),
+    );
   }
 }
 
