@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 /// 3-band DJ waveform after rbxport (https://github.com/chrisle/rbxport,
 /// GPL-2.0-or-later): overview strip plus a scrolling detail with the playhead
@@ -402,6 +403,7 @@ class WaveformView extends StatefulWidget {
     this.loopStart = 0,
     this.loopEnd = 0,
     this.cuePoint = -1,
+    this.playing = false,
     this.zoom = defaultZoom,
     this.onOverviewSeek,
     this.onScrub,
@@ -422,6 +424,8 @@ class WaveformView extends StatefulWidget {
   final double loopStart;
   final double loopEnd;
   final double cuePoint;
+  /// While true the view animates [position] forward between updates.
+  final bool playing;
   /// Heard seconds across the detail; see [defaultZoom], [minZoom], [maxZoom].
   final double zoom;
   /// Full-track overview strip tap or drag → absolute position in seconds.
@@ -440,7 +444,70 @@ class WaveformView extends StatefulWidget {
   State<WaveformView> createState() => _WaveformViewState();
 }
 
-class _WaveformViewState extends State<WaveformView> {
+class _WaveformViewState extends State<WaveformView> with SingleTickerProviderStateMixin {
+  // Smooth playback motion: the controller only reports positions every 50 ms,
+  // so while playing we redraw every frame, extrapolating at the playback rate
+  // and easing out the error whenever a fresh position arrives.
+  late final Ticker _ticker = createTicker(_onFrame);
+  double _base = 0; // last reported position
+  Duration _baseAt = Duration.zero; // ticker time it arrived
+  double _error = 0; // shown − reported at that moment, eased to 0
+  double _shown = 0;
+  Duration _now = Duration.zero;
+
+  static const _snapSec = 0.25; // bigger jumps (seek, scrub, cue) snap
+  static const _easeSec = 0.1;
+
+  @override
+  void initState() {
+    super.initState();
+    _base = _shown = widget.position;
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(WaveformView old) {
+    super.didUpdateWidget(old);
+    if (widget.position != old.position || widget.playing != old.playing) {
+      final err = _shown - widget.position;
+      _error = widget.playing && err.abs() < _snapSec ? err : 0;
+      _base = widget.position;
+      _baseAt = _now;
+      if (!widget.playing) _shown = widget.position;
+    }
+    _syncTicker();
+  }
+
+  void _syncTicker() {
+    if (widget.playing && !_ticker.isActive) {
+      _now = _baseAt = Duration.zero; // elapsed restarts from zero
+      _ticker.start();
+    } else if (!widget.playing && _ticker.isActive) {
+      _ticker.stop();
+    }
+  }
+
+  void _onFrame(Duration elapsed) {
+    _now = elapsed;
+    final dt = (elapsed - _baseAt).inMicroseconds / 1e6;
+    final ease = math.exp(-dt / _easeSec);
+    var t = _base + dt * widget.rate + _error * ease;
+    // A looping deck wraps at the loop end like the engine does, rather than
+    // running past it until the next reported position.
+    final w = widget;
+    final loopLen = w.loopEnd - w.loopStart;
+    if (w.loopEnabled && loopLen > 0 && _base <= w.loopEnd && t > w.loopEnd) {
+      t = w.loopStart + (t - w.loopEnd) % loopLen;
+    }
+    setState(() => _shown = t.clamp(0.0, w.duration).toDouble());
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    super.dispose();
+  }
+
   // Gesture state lives here, not in the builder: the view rebuilds every
   // tick while a finger is down.
   double _dragFrom = 0;
@@ -471,7 +538,7 @@ class _WaveformViewState extends State<WaveformView> {
             detail: w0.detail,
             overview: w0.overview,
             columnsPerSec: w0.columnsPerSec,
-            position: w0.position,
+            position: w0.playing ? _shown : w0.position,
             duration: w0.duration,
             hangDown: w0.hangDown,
             beatOffset: w0.beatOffset,

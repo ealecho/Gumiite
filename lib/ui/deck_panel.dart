@@ -59,6 +59,7 @@ class DeckPanel extends StatelessWidget {
       loopStart: d.loopStart,
       loopEnd: d.loopEnd,
       cuePoint: d.loaded ? d.cuePoint : -1,
+      playing: d.playing,
       zoom: zoom,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
       onScrub: d.loaded && !gridEditing ? (t) => controller.seekTo(index, t) : null,
@@ -72,6 +73,31 @@ class DeckPanel extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onToggleGrid,
         child: AbsorbPointer(child: detail),
+      );
+    } else if (d.loaded) {
+      // Nudge sits either side of the playhead: − slows/jogs back, + speeds
+      // up/jogs forward. Stacked above the wave so a press never scrubs it.
+      // The builder runs later, so it must not read `detail` after this
+      // reassignment (that would nest the view inside itself forever).
+      final plain = detail;
+      detail = LayoutBuilder(
+        builder: (context, c) {
+          final cx = c.maxWidth / 2;
+          const hit = 48.0;
+          const offset = 64.0;
+          Widget glyph(bool faster) => Positioned(
+            left: cx + (faster ? offset : -offset) - hit / 2,
+            top: (c.maxHeight - hit) / 2,
+            width: hit,
+            height: hit,
+            child: _NudgeGlyph(
+              faster: faster,
+              onStart: () => controller.startNudge(index, faster: faster),
+              onEnd: () => controller.endNudge(index),
+            ),
+          );
+          return Stack(fit: StackFit.expand, children: [plain, glyph(false), glyph(true)]);
+        },
       );
     }
     final rows = <Widget>[
@@ -370,18 +396,6 @@ class DeckPanel extends StatelessWidget {
       ),
       gap,
       _DeckButton(label: '+', enabled: hasBpm, onStep: () => controller.nudgeBpm(index, 0.1)),
-      groupGap,
-      _DeckButton(
-        icon: Icons.arrow_back,
-        onHoldStart: () => controller.startNudge(index, faster: false),
-        onHoldEnd: () => controller.endNudge(index),
-      ),
-      gap,
-      _DeckButton(
-        icon: Icons.arrow_forward,
-        onHoldStart: () => controller.startNudge(index, faster: true),
-        onHoldEnd: () => controller.endNudge(index),
-      ),
     ];
   }
 
@@ -404,50 +418,102 @@ class DeckPanel extends StatelessWidget {
   }
 }
 
+/// Minimal on-wave nudge glyph, drawn like the old jump chevrons: a thin,
+/// translucent − or + that brightens while held.
+class _NudgeGlyph extends StatefulWidget {
+  const _NudgeGlyph({required this.faster, required this.onStart, required this.onEnd});
+
+  final bool faster;
+  final VoidCallback onStart;
+  final VoidCallback onEnd;
+
+  @override
+  State<_NudgeGlyph> createState() => _NudgeGlyphState();
+}
+
+class _NudgeGlyphState extends State<_NudgeGlyph> {
+  bool _held = false;
+
+  void _set(bool held) {
+    if (held == _held) return;
+    setState(() => _held = held);
+    held ? widget.onStart() : widget.onEnd();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => _set(true),
+      onPointerUp: (_) => _set(false),
+      onPointerCancel: (_) => _set(false),
+      child: Center(
+        child: CustomPaint(
+          size: const Size(16, 16),
+          painter: _NudgePainter(plus: widget.faster, alpha: _held ? 0.85 : 0.35),
+        ),
+      ),
+    );
+  }
+}
+
+class _NudgePainter extends CustomPainter {
+  const _NudgePainter({required this.plus, required this.alpha});
+
+  final bool plus;
+  final double alpha;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = Colors.white.withValues(alpha: alpha)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    canvas.drawLine(c.translate(-r, 0), c.translate(r, 0), p);
+    if (plus) canvas.drawLine(c.translate(0, -r), c.translate(0, r), p);
+  }
+
+  @override
+  bool shouldRepaint(_NudgePainter old) => old.plus != plus || old.alpha != alpha;
+}
+
 /// rbxport-style deck button: flat #282828, 2 px corners, blue when lit.
-/// [onTap] fires once; [onStep] repeats while held; [onHoldStart]/[onHoldEnd]
-/// bracket a press (nudge).
+/// [onTap] fires once; [onStep] repeats while held.
 class _DeckButton extends StatelessWidget {
   const _DeckButton({
-    this.label,
-    this.icon,
+    required this.label,
     this.sub,
     this.width = 31,
     this.lit = false,
     this.enabled = true,
     this.onTap,
     this.onStep,
-    this.onHoldStart,
-    this.onHoldEnd,
   });
 
-  final String? label;
-  final IconData? icon;
+  final String label;
   final String? sub;
   final double width;
   final bool lit;
   final bool enabled;
   final VoidCallback? onTap;
   final VoidCallback? onStep;
-  final VoidCallback? onHoldStart;
-  final VoidCallback? onHoldEnd;
 
   @override
   Widget build(BuildContext context) {
     final fg = !enabled ? SideDeckTheme.deckOutline : Colors.white;
     final Widget content;
-    if (icon != null) {
-      content = Icon(icon, size: 16, color: fg);
-    } else if (sub != null) {
+    if (sub != null) {
       content = Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(label!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg)),
+          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg)),
           Text(sub!, style: TextStyle(fontSize: 7.5, fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.1, color: lit ? Colors.white : SideDeckTheme.deckDim)),
         ],
       );
     } else {
-      content = Text(label!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: fg));
+      content = Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: fg));
     }
     final face = Container(
       width: width,
@@ -461,14 +527,6 @@ class _DeckButton extends StatelessWidget {
     );
     if (!enabled) return face;
     if (onStep != null) return HoldRepeatButton(onStep: onStep!, child: face);
-    if (onHoldStart != null) {
-      return Listener(
-        onPointerDown: (_) => onHoldStart!(),
-        onPointerUp: (_) => onHoldEnd?.call(),
-        onPointerCancel: (_) => onHoldEnd?.call(),
-        child: face,
-      );
-    }
     return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: face);
   }
 }
