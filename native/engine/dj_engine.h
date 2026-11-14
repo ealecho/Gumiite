@@ -8,6 +8,8 @@
 #define DJ_FFI_EXPORT
 #endif
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +67,12 @@ DJ_FFI_EXPORT void dj_beat_jump(DjEngine engine, int deck, int beats);
 
 DJ_FFI_EXPORT int dj_waveform_bins(void);
 DJ_FFI_EXPORT int dj_waveform_copy(DjEngine engine, int deck, float* min_out, float* max_out, int bins);
+
+/** 3-band waveform: low/mid/high bytes (0..127) per column. overview=0: detail
+ *  columns at dj_wave_bands_per_sec() per second; overview=1: fixed-count overview. */
+DJ_FFI_EXPORT int dj_wave_bands_per_sec(void);
+DJ_FFI_EXPORT int dj_wave_bands_columns(DjEngine engine, int deck, int overview);
+DJ_FFI_EXPORT int dj_wave_bands_copy(DjEngine engine, int deck, int overview, uint8_t* out, int columns);
 
 /** Decode a 60s prefix (22 kHz mono) + BPM/key/grid. Uses ID3 TBPM/TKEY when present. */
 DJ_FFI_EXPORT int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset);

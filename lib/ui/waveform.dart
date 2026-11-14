@@ -3,16 +3,24 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-/// Horizontal scrolling DJ waveform: playhead pinned center, regular beat grid.
+/// 3-band DJ waveform after rbxport (https://github.com/chrisle/rbxport,
+/// GPL-2.0-or-later): overview strip plus a scrolling detail with the playhead
+/// pinned center. Bands are low/mid/high bytes (0..127) per column.
+///
+/// With [hangDown] false (deck A) the overview sits on top and the detail rises
+/// from the bottom edge; with [hangDown] true (deck B) the overview moves to the
+/// bottom and the detail hangs from the top edge, so two decks stacked on top of
+/// each other meet at a shared center line.
 class WaveformPainter extends CustomPainter {
   WaveformPainter({
-    required this.min,
-    required this.max,
+    required this.detail,
+    required this.overview,
+    required this.columnsPerSec,
     required this.position,
     required this.duration,
     required this.beatOffset,
     required this.bpm,
-    required this.color,
+    this.hangDown = false,
     this.rate = 1,
     this.loopEnabled = false,
     this.loopStart = 0,
@@ -21,13 +29,14 @@ class WaveformPainter extends CustomPainter {
     this.showJumpZone = false,
   });
 
-  final Float32List min;
-  final Float32List max;
+  final Uint8List detail;
+  final Uint8List overview;
+  final int columnsPerSec;
   final double position;
   final double duration;
   final double beatOffset;
   final double bpm;
-  final Color color;
+  final bool hangDown;
   /// Playback rate (file seconds per heard second). Zooms the scrolling
   /// waveform in heard-time so synced decks share a beat grid.
   final double rate;
@@ -37,161 +46,274 @@ class WaveformPainter extends CustomPainter {
   final double zoomWindowSec;
   final bool showJumpZone;
 
+  static const overviewH = 26.0;
+  static const _overviewWaveH = 19.0;
+  static const _positionBarH = 3.0;
+
+  // Colour per combination of bands reaching a pixel (bit 1 low, 2 mid, 4 high).
+  static const _bandColours = <int, Color>{
+    1: Color(0xFF0055E1),
+    2: Color(0xFFFFA600),
+    4: Color(0xFFFFFFFF),
+    3: Color(0xFFB4690A),
+    5: Color(0xFFD2DCFA),
+    6: Color(0xFFFFF0D7),
+    7: Color(0xFFF5EBD7),
+  };
+  static const _silence = Color(0xFFD2DCFA);
+  static const _bg = Color(0xFF000000);
+  static const _playhead = Color(0xFFE0E0E0);
+  static const _beat = Color(0xFF4C4C4C);
+  static const _beatHead = Color(0xFF7C7C7C);
+  static const _downbeat = Color(0xFFFFFFFF);
+  static const _downbeatHead = Color(0xFFEA3323);
+  static const _loop = Color(0xFF3571E3);
+  static const _barRim = Color(0xFF6B6B6B);
+  static const _barPlayed = Color(0xFFC8C8C8);
+
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF0A0C10));
-
-    if (min.isEmpty || duration <= 0 || size.width <= 1 || size.height <= 1) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = _bg);
+    if (duration <= 0 || size.width <= 1 || size.height <= overviewH + 2) {
       return;
     }
+    final overviewTop = hangDown ? size.height - overviewH : 0.0;
+    final detailTop = hangDown ? 0.0 : overviewH;
+    final detailBottom = hangDown ? size.height - overviewH : size.height;
+    _paintOverview(canvas, size.width, overviewTop);
+    _paintDetail(canvas, size.width, detailTop, detailBottom);
+  }
 
-    var peak = 0.001;
-    final n = math.min(min.length, max.length);
-    for (var i = 0; i < n; i++) {
-      peak = math.max(peak, math.max(min[i].abs(), max[i].abs()));
+  void _paintOverview(Canvas canvas, double width, double top) {
+    final waveTop = top + 2;
+    final base = waveTop + _overviewWaveH;
+    final cols = overview.length ~/ 3;
+    if (cols > 0) {
+      // Overview means run low on long tracks; scale so the loudest column fills the strip.
+      var norm = 0.0;
+      for (var c = 0; c < cols; c++) {
+        norm = math.max(norm, overview[c * 3] / 128);
+        norm = math.max(norm, overview[c * 3 + 1] / 256);
+        norm = math.max(norm, overview[c * 3 + 2] / 128);
+      }
+      final fill = norm > 0 ? 1 / norm : 1.0;
+      final low = Path(), mid = Path(), high = Path();
+      for (var px = 0; px < width; px++) {
+        // Max over the columns under this pixel so transients survive.
+        final c0 = (px * cols / width).floor();
+        final c1 = math.max(c0 + 1, ((px + 1) * cols / width).floor()).clamp(0, cols);
+        var l = 0, m = 0, h = 0;
+        for (var c = c0; c < c1; c++) {
+          l = math.max(l, overview[c * 3]);
+          m = math.max(m, overview[c * 3 + 1]);
+          h = math.max(h, overview[c * 3 + 2]);
+        }
+        // Stacked from the baseline; mid draws at half weight, as in rbxport.
+        void bar(Path p, int v, double scale) {
+          if (v == 0) return;
+          final hh = math.min(v / scale * fill, 1.0) * _overviewWaveH;
+          p.addRect(Rect.fromLTRB(px.toDouble(), base - hh, px + 1.0, base));
+        }
+
+        bar(low, l, 128);
+        bar(mid, m, 256);
+        bar(high, h, 128);
+      }
+      canvas.drawPath(low, Paint()..color = _bandColours[1]!);
+      canvas.drawPath(mid, Paint()..color = _bandColours[2]!);
+      canvas.drawPath(high, Paint()..color = _bandColours[7]!);
     }
 
-    const overviewH = WaveformPainter.overviewH;
-    final waveTop = overviewH;
-    final waveH = size.height - overviewH;
-    final mid = waveTop + waveH / 2;
-
-    final playRate = rate.clamp(0.5, 2.0);
-    // Heard-time window (what you hear), mapped back to file seconds.
-    // rate > 1 compresses the wave; rate < 1 stretches it.
-    final halfWin = (zoomWindowSec / 2) * playRate;
-    final viewStart = position - halfWin;
-    final viewEnd = position + halfWin;
-    final viewDur = zoomWindowSec * playRate;
-
-    double xForTime(double t) => ((t - viewStart) / viewDur) * size.width;
-
-    for (var px = 0.0; px < size.width; px++) {
-      final t0 = (px / size.width) * duration;
-      final t1 = ((px + 1) / size.width) * duration;
-      final amp = _peakInRange(t0, t1, n, duration, peak);
-      final h = amp * (overviewH - 2);
-      final y0 = (overviewH - h) / 2;
+    if (loopEnabled && loopEnd > loopStart) {
+      final x0 = (loopStart / duration * width).clamp(0.0, width);
+      final x1 = (loopEnd / duration * width).clamp(0.0, width);
       canvas.drawRect(
-        Rect.fromLTWH(px, y0, 1.2, h.clamp(1, overviewH)),
-        Paint()..color = _ampColor(color, amp).withValues(alpha: 0.95),
+        Rect.fromLTRB(x0, waveTop, x1, base),
+        Paint()..color = _loop.withValues(alpha: 0.38),
       );
     }
-    final winL = (viewStart / duration) * size.width;
-    final winR = (viewEnd / duration) * size.width;
+
+    // Position bar: hollow rim, played part filled.
+    final barTop = base + 2;
+    final progress = (position / duration).clamp(0.0, 1.0);
+    final rim = Paint()..color = _barRim;
+    canvas.drawRect(Rect.fromLTWH(0, barTop, width, 1), rim);
+    canvas.drawRect(Rect.fromLTWH(0, barTop + _positionBarH - 1, width, 1), rim);
     canvas.drawRect(
-      Rect.fromLTRB(winL.clamp(0, size.width), 0, winR.clamp(0, size.width), overviewH),
-      Paint()..color = Colors.white.withValues(alpha: 0.12),
-    );
-    _drawPlayhead(
-      canvas,
-      x: (position / duration) * size.width,
-      y0: 0,
-      y1: overviewH,
-      coreWidth: 2.4,
-      tick: true,
-    );
-    _drawLoopOverview(canvas, size, overviewH);
-
-    for (var px = 0.0; px < size.width; px++) {
-      final t0 = viewStart + (px / size.width) * viewDur;
-      final t1 = viewStart + ((px + 1) / size.width) * viewDur;
-      if (t1 <= 0 || t0 >= duration) continue;
-      final loHi = _minMaxInRange(t0.clamp(0.0, duration), t1.clamp(0.0, duration), n, duration);
-      final amp = math.max(loHi.$1.abs(), loHi.$2.abs()) / peak;
-      final yHi = mid - (loHi.$2.abs() / peak) * (waveH * 0.48);
-      final yLo = mid + (loHi.$1.abs() / peak) * (waveH * 0.48);
-      final h = (yLo - yHi).clamp(1.0, waveH);
-      canvas.drawRect(
-        Rect.fromLTWH(px, yHi, 1.05, h),
-        Paint()..color = _ampColor(color, amp),
-      );
-    }
-
-    canvas.drawLine(
-      Offset(0, mid),
-      Offset(size.width, mid),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.12)
-        ..strokeWidth = 1,
+      Rect.fromLTWH(0, barTop, width * progress, _positionBarH),
+      Paint()..color = _barPlayed,
     );
 
-    // Grid on top of the wave so it stays visible.
-    final beatSec = bpm > 1 ? 60.0 / bpm : 0.0;
-    if (beatSec > 0.05) {
-      var t = beatOffset;
-      if (t > viewStart) {
-        t -= (((t - viewStart) / beatSec).ceil() * beatSec);
-      }
-      while (t < viewStart) {
-        t += beatSec;
-      }
-      for (; t <= viewEnd; t += beatSec) {
-        if (t < 0 || t > duration) continue;
-        final idx = ((t - beatOffset) / beatSec).round();
-        final phrase = idx % 32 == 0; // 8 bars
-        final bar = idx % 4 == 0;
-        final paint = Paint()
-          ..strokeWidth = phrase ? 2.0 : (bar ? 1.4 : 1.0)
-          ..color = phrase
-              ? const Color(0xFFFFF3B0).withValues(alpha: 0.72)
-              : Colors.white.withValues(alpha: bar ? 0.42 : 0.20);
-        canvas.drawLine(Offset(xForTime(t), waveTop), Offset(xForTime(t), size.height), paint);
-      }
-    }
-
-    _drawLoopZoomed(canvas, size, waveTop, xForTime);
-
-    if (showJumpZone) {
-      _drawJumpZone(canvas, size, waveTop);
-    }
-
-    _drawPlayhead(
-      canvas,
-      x: size.width / 2,
-      y0: waveTop,
-      y1: size.height,
-      coreWidth: 2.6,
-      tick: false,
+    final x = width * progress;
+    canvas.drawRect(
+      Rect.fromLTWH(x - 1, top, 2, overviewH),
+      Paint()..color = _playhead,
     );
   }
 
-  static const overviewH = 16.0;
-  static const _playhead = Color(0xFFF4F7FB);
+  void _paintDetail(Canvas canvas, double width, double top, double bottom) {
+    canvas.save();
+    canvas.clipRect(Rect.fromLTRB(0, top, width, bottom));
 
-  void _drawPlayhead(
-    Canvas canvas, {
-    required double x,
-    required double y0,
-    required double y1,
-    required double coreWidth,
-    required bool tick,
-  }) {
-    final halo = Paint()
-      ..color = const Color(0xE6000000)
-      ..strokeWidth = coreWidth + 2.4
-      ..strokeCap = StrokeCap.square;
-    final core = Paint()
-      ..color = _playhead
-      ..strokeWidth = coreWidth
-      ..strokeCap = StrokeCap.square;
-    canvas.drawLine(Offset(x, y0), Offset(x, y1), halo);
-    canvas.drawLine(Offset(x, y0), Offset(x, y1), core);
-    if (!tick) {
-      return;
+    final playRate = rate.clamp(0.5, 2.0);
+    // Heard-time window mapped back to file seconds: rate > 1 compresses the wave.
+    final viewDur = zoomWindowSec * playRate;
+    final viewStart = position - viewDur / 2;
+    double xForTime(double t) => (t - viewStart) / viewDur * width;
+
+    final full = bottom - top - 1;
+    // Deck A grows up from the bottom edge, deck B hangs down from the top edge.
+    final base = hangDown ? top : bottom;
+    final dir = hangDown ? 1.0 : -1.0;
+
+    final cols = detail.length ~/ 3;
+    if (cols > 0) {
+      final paths = <int, Path>{for (final k in _bandColours.keys) k: Path()};
+      final silence = Path();
+      final colsPerPx = viewDur * columnsPerSec / width;
+      for (var px = 0; px < width; px++) {
+        final t = viewStart + px / width * viewDur;
+        if (t < 0 || t >= duration) continue;
+        final v = colsPerPx >= 1
+            ? _maxOver(t * columnsPerSec, colsPerPx, cols)
+            : _interpolate(t * columnsPerSec, cols);
+        if (v.$1 == 0 && v.$2 == 0 && v.$3 == 0) {
+          silence.addRect(_span(px, base, dir, 0, 1));
+          continue;
+        }
+        _addSegments(paths, px, base, dir, full, v.$1, v.$2, v.$3);
+      }
+      canvas.drawPath(silence, Paint()..color = _silence);
+      for (final e in paths.entries) {
+        canvas.drawPath(e.value, Paint()..color = _bandColours[e.key]!);
+      }
     }
-    final tri = Path()
-      ..moveTo(x, y1)
-      ..lineTo(x - 5.5, y0)
-      ..lineTo(x + 5.5, y0)
-      ..close();
-    canvas.drawPath(tri, Paint()..color = const Color(0xE6000000));
-    final inner = Path()
-      ..moveTo(x, y1 - 1)
-      ..lineTo(x - 4, y0 + 1)
-      ..lineTo(x + 4, y0 + 1)
-      ..close();
-    canvas.drawPath(inner, Paint()..color = _playhead);
+
+    if (loopEnabled && loopEnd > loopStart) {
+      final x0 = xForTime(loopStart).clamp(0.0, width);
+      final x1 = xForTime(loopEnd).clamp(0.0, width);
+      if (x1 > x0) {
+        canvas.drawRect(
+          Rect.fromLTRB(x0, top, x1, bottom),
+          Paint()..color = _loop.withValues(alpha: 0.38),
+        );
+      }
+    }
+
+    _paintGrid(canvas, width, top, bottom, viewStart, viewDur, xForTime);
+
+    if (showJumpZone) {
+      _drawJumpZone(canvas, width, top, bottom);
+    }
+
+    canvas.drawRect(
+      Rect.fromLTWH(width / 2 - 0.75, top, 1.5, bottom - top),
+      Paint()..color = _playhead,
+    );
+    canvas.restore();
+  }
+
+  /// Per-band maximum over the columns covered by one pixel.
+  (int, int, int) _maxOver(double c, double span, int cols) {
+    final c0 = c.floor().clamp(0, cols - 1);
+    final c1 = (c + span).ceil().clamp(c0 + 1, cols);
+    var l = 0, m = 0, h = 0;
+    for (var i = c0; i < c1; i++) {
+      l = math.max(l, detail[i * 3]);
+      m = math.max(m, detail[i * 3 + 1]);
+      h = math.max(h, detail[i * 3 + 2]);
+    }
+    return (l, m, h);
+  }
+
+  /// Linear between columns, except a sharp attack holds the earlier value so
+  /// kicks stay vertical.
+  (int, int, int) _interpolate(double c, int cols) {
+    final i = c.floor().clamp(0, cols - 1);
+    final j = math.min(i + 1, cols - 1);
+    final f = c - c.floor();
+    int band(int b) {
+      final a = detail[i * 3 + b];
+      final n = detail[j * 3 + b];
+      if ((a == 0 && n > 0) || (n - a >= 16 && n >= 2 * a)) return a;
+      return (a + (n - a) * f).round();
+    }
+
+    return (band(0), band(1), band(2));
+  }
+
+  /// Draw the reached stretches outermost first, so the inner core carries the
+  /// colour of every band that reaches it.
+  void _addSegments(
+    Map<int, Path> paths,
+    int px,
+    double base,
+    double dir,
+    double full,
+    int low,
+    int mid,
+    int high,
+  ) {
+    double reach(int v) => v == 0 ? 0 : math.max(0.5, v / 127 * full);
+    final bands = [(1, reach(low)), (2, reach(mid)), (4, reach(high))]
+      ..sort((a, b) => b.$2.compareTo(a.$2));
+    var mask = 0;
+    for (var k = 0; k < 3; k++) {
+      final outer = bands[k].$2;
+      if (outer <= 0) break;
+      mask |= bands[k].$1;
+      final inner = k + 1 < 3 ? bands[k + 1].$2 : 0.0;
+      if (outer > inner) {
+        paths[mask]!.addRect(_span(px, base, dir, inner, outer));
+      }
+    }
+  }
+
+  Rect _span(int px, double base, double dir, double from, double to) {
+    final y0 = base + dir * from;
+    final y1 = base + dir * to;
+    return Rect.fromLTRB(px.toDouble(), math.min(y0, y1), px + 1.0, math.max(y0, y1));
+  }
+
+  void _paintGrid(
+    Canvas canvas,
+    double width,
+    double top,
+    double bottom,
+    double viewStart,
+    double viewDur,
+    double Function(double) xForTime,
+  ) {
+    final beatSec = bpm > 1 ? 60.0 / bpm : 0.0;
+    if (beatSec <= 0.05) return;
+    final viewEnd = viewStart + viewDur;
+    var idx = ((viewStart - beatOffset) / beatSec).ceil();
+    const headW = 6.0, headH = 4.0;
+    final beatLine = Paint()..color = _beat;
+    final downLine = Paint()..color = _downbeat;
+    final beatHeads = Path(), downHeads = Path();
+    for (var t = beatOffset + idx * beatSec; t <= viewEnd; t += beatSec, idx++) {
+      if (t < 0 || t > duration) continue;
+      final down = idx % 4 == 0;
+      final x = xForTime(t).roundToDouble();
+      canvas.drawRect(
+        Rect.fromLTRB(x, top + headH, x + 1, bottom - headH),
+        down ? downLine : beatLine,
+      );
+      final heads = down ? downHeads : beatHeads;
+      final cx = x + 0.5;
+      heads
+        ..moveTo(cx - headW / 2, top)
+        ..lineTo(cx + headW / 2, top)
+        ..lineTo(cx, top + headH)
+        ..close()
+        ..moveTo(cx - headW / 2, bottom)
+        ..lineTo(cx + headW / 2, bottom)
+        ..lineTo(cx, bottom - headH)
+        ..close();
+    }
+    canvas.drawPath(beatHeads, Paint()..color = _beatHead);
+    canvas.drawPath(downHeads, Paint()..color = _downbeatHead);
   }
 
   static const jumpHalf = 0.14;
@@ -201,24 +323,11 @@ class WaveformPainter extends CustomPainter {
 
   /// Right edge of the beat-jump hit rect.
   static double jumpZoneRight(double width) => width * (0.5 + jumpHalf);
-  static const _loopColor = Color(0xFF1DE9B6);
 
-  void _drawJumpZone(Canvas canvas, Size size, double waveTop) {
-    final cx = size.width / 2;
-    final half = size.width * jumpHalf;
-    final left = cx - half;
-    final right = cx + half;
-    canvas.drawRect(
-      Rect.fromLTRB(left, waveTop, right, size.height),
-      Paint()..color = Colors.white.withValues(alpha: 0.06),
-    );
-    final edge = Paint()
-      ..color = Colors.white.withValues(alpha: 0.22)
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset(left, waveTop), Offset(left, size.height), edge);
-    canvas.drawLine(Offset(right, waveTop), Offset(right, size.height), edge);
-
-    final cy = waveTop + (size.height - waveTop) / 2;
+  void _drawJumpZone(Canvas canvas, double width, double top, double bottom) {
+    final cx = width / 2;
+    final half = width * jumpHalf;
+    final cy = (top + bottom) / 2;
     _chevron(canvas, Offset(cx - half * 0.55, cy), left: true);
     _chevron(canvas, Offset(cx + half * 0.55, cy), left: false);
     _jumpLabel(canvas, Offset(cx - half * 0.55 + 10, cy - 7), '4');
@@ -227,7 +336,7 @@ class WaveformPainter extends CustomPainter {
 
   void _chevron(Canvas canvas, Offset c, {required bool left}) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.55)
+      ..color = Colors.white.withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeJoin = StrokeJoin.round;
@@ -244,7 +353,7 @@ class WaveformPainter extends CustomPainter {
       text: TextSpan(
         text: s,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.5),
+          color: Colors.white.withValues(alpha: 0.35),
           fontSize: 10,
           fontWeight: FontWeight.w800,
         ),
@@ -254,85 +363,16 @@ class WaveformPainter extends CustomPainter {
     tp.paint(canvas, o);
   }
 
-  void _drawLoopOverview(Canvas canvas, Size size, double overviewH) {
-    if (!loopEnabled || loopEnd <= loopStart || duration <= 0) return;
-    final x0 = ((loopStart / duration) * size.width).clamp(0.0, size.width);
-    final x1 = ((loopEnd / duration) * size.width).clamp(0.0, size.width);
-    if (x1 <= x0) return;
-    canvas.drawRect(
-      Rect.fromLTRB(x0, 0, x1, overviewH),
-      Paint()..color = _loopColor.withValues(alpha: 0.45),
-    );
-  }
-
-  void _drawLoopZoomed(
-    Canvas canvas,
-    Size size,
-    double waveTop,
-    double Function(double) xForTime,
-  ) {
-    if (!loopEnabled || loopEnd <= loopStart) return;
-    final x0 = xForTime(loopStart);
-    final x1 = xForTime(loopEnd);
-    if (x1 < 0 || x0 > size.width) return;
-    final left = x0.clamp(0.0, size.width);
-    final right = x1.clamp(0.0, size.width);
-    canvas.drawRect(
-      Rect.fromLTRB(left, waveTop, right, size.height),
-      Paint()..color = _loopColor.withValues(alpha: 0.22),
-    );
-    final edge = Paint()
-      ..color = _loopColor
-      ..strokeWidth = 2;
-    if (x0 >= 0 && x0 <= size.width) {
-      canvas.drawLine(Offset(x0, waveTop), Offset(x0, size.height), edge);
-    }
-    if (x1 >= 0 && x1 <= size.width) {
-      canvas.drawLine(Offset(x1, waveTop), Offset(x1, size.height), edge);
-    }
-  }
-
-  (double, double) _minMaxInRange(double t0, double t1, int n, double duration) {
-    var i0 = ((t0 / duration) * n).floor().clamp(0, n - 1);
-    var i1 = ((t1 / duration) * n).ceil().clamp(0, n - 1);
-    if (i1 < i0) i1 = i0;
-    var lo = 0.0;
-    var hi = 0.0;
-    for (var i = i0; i <= i1; i++) {
-      lo = math.min(lo, min[i]);
-      hi = math.max(hi, max[i]);
-    }
-    return (lo, hi);
-  }
-
-  double _peakInRange(double t0, double t1, int n, double duration, double peak) {
-    final mm = _minMaxInRange(t0, t1, n, duration);
-    return math.max(mm.$1.abs(), mm.$2.abs()) / peak;
-  }
-
-  Color _ampColor(Color base, double amp) {
-    final a = amp.clamp(0.0, 1.0);
-    if (a < 0.25) {
-      return Color.lerp(base.withValues(alpha: 0.35), base, a / 0.25)!;
-    }
-    if (a < 0.6) {
-      return Color.lerp(base, const Color(0xFFE040FB), (a - 0.25) / 0.35)!;
-    }
-    if (a < 0.85) {
-      return Color.lerp(const Color(0xFFE040FB), const Color(0xFFFF6B35), (a - 0.6) / 0.25)!;
-    }
-    return Color.lerp(const Color(0xFFFF6B35), const Color(0xFFFFF3B0), (a - 0.85) / 0.15)!;
-  }
-
   @override
   bool shouldRepaint(covariant WaveformPainter oldDelegate) {
     return oldDelegate.position != position ||
         oldDelegate.duration != duration ||
-        oldDelegate.min != min ||
-        oldDelegate.max != max ||
+        oldDelegate.detail != detail ||
+        oldDelegate.overview != overview ||
         oldDelegate.beatOffset != beatOffset ||
         oldDelegate.bpm != bpm ||
         oldDelegate.rate != rate ||
+        oldDelegate.hangDown != hangDown ||
         oldDelegate.loopEnabled != loopEnabled ||
         oldDelegate.loopStart != loopStart ||
         oldDelegate.loopEnd != loopEnd ||
@@ -343,11 +383,12 @@ class WaveformPainter extends CustomPainter {
 class WaveformView extends StatelessWidget {
   const WaveformView({
     super.key,
-    required this.min,
-    required this.max,
+    required this.detail,
+    required this.overview,
+    required this.columnsPerSec,
     required this.position,
     required this.duration,
-    required this.color,
+    this.hangDown = false,
     this.beatOffset = 0,
     this.bpm = 0,
     this.rate = 1,
@@ -358,14 +399,15 @@ class WaveformView extends StatelessWidget {
     this.onOverviewSeek,
   });
 
-  final Float32List min;
-  final Float32List max;
+  final Uint8List detail;
+  final Uint8List overview;
+  final int columnsPerSec;
   final double position;
   final double duration;
+  final bool hangDown;
   final double beatOffset;
   final double bpm;
   final double rate;
-  final Color color;
   final bool loopEnabled;
   final double loopStart;
   final double loopEnd;
@@ -386,14 +428,15 @@ class WaveformView extends StatelessWidget {
             : 88.0;
         final paint = CustomPaint(
           painter: WaveformPainter(
-            min: min,
-            max: max,
+            detail: detail,
+            overview: overview,
+            columnsPerSec: columnsPerSec,
             position: position,
             duration: duration,
+            hangDown: hangDown,
             beatOffset: beatOffset,
             bpm: bpm,
             rate: rate,
-            color: color,
             loopEnabled: loopEnabled,
             loopStart: loopStart,
             loopEnd: loopEnd,
@@ -408,7 +451,11 @@ class WaveformView extends StatelessWidget {
         return GestureDetector(
           onTapDown: (d) {
             final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
-            if (d.localPosition.dy < WaveformPainter.overviewH) {
+            final y = d.localPosition.dy;
+            final inOverview = hangDown
+                ? y > h - WaveformPainter.overviewH
+                : y < WaveformPainter.overviewH;
+            if (inOverview) {
               onOverviewSeek?.call(nx * duration);
               return;
             }

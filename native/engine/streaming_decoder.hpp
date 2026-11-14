@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "last_error.hpp"
+#include "wave_bands.hpp"
 
 #ifdef __ANDROID__
 #include "mediacodec_aac.hpp"
@@ -463,12 +464,16 @@ struct StreamingDecoder {
 };
 
 inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& waveMin,
-                         std::vector<float>& waveMax) {
+                         std::vector<float>& waveMax, std::vector<uint8_t>& bandDetail,
+                         std::vector<uint8_t>& bandOverview) {
   waveMin.assign((size_t)std::max(1, bins), 0.0f);
   waveMax.assign((size_t)std::max(1, bins), 0.0f);
+  bandDetail.clear();
+  bandOverview.clear();
   if (dec.totalFrames == 0 || bins < 1) {
     return;
   }
+  wave_bands::Scanner bands(dec.sampleRate, dec.totalFrames);
   dec.seek(0);
   constexpr uint64_t kBuf = 4096;
   std::vector<float> buf((size_t)kBuf * 2);
@@ -481,10 +486,14 @@ inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& wa
     for (uint64_t i = 0; i < got; ++i) {
       const int b = (int)std::min((int64_t)bins - 1,
                                     (int64_t)((pos + i) * (uint64_t)bins / dec.totalFrames));
-      const float s = 0.5f * (buf[(size_t)i * 2] + buf[(size_t)i * 2 + 1]);
+      const float l = buf[(size_t)i * 2];
+      const float r = buf[(size_t)i * 2 + 1];
+      const float s = 0.5f * (l + r);
       waveMin[(size_t)b] = std::min(waveMin[(size_t)b], s);
       waveMax[(size_t)b] = std::max(waveMax[(size_t)b], s);
+      bands.push(l, r);
     }
     pos += got;
   }
+  bands.finish(bandDetail, bandOverview);
 }

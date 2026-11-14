@@ -33,6 +33,11 @@ class DeckState {
   double eqHigh = 0;
   Float32List waveMin = Float32List(0);
   Float32List waveMax = Float32List(0);
+
+  /// 3-band waveform (low/mid/high bytes per column); see NativeEngine.waveBands.
+  Uint8List bandDetail = Uint8List(0);
+  Uint8List bandOverview = Uint8List(0);
+  int bandsPerSec = 150;
 }
 
 class DjController extends ChangeNotifier {
@@ -196,6 +201,9 @@ class DjController extends ChangeNotifier {
     final wave = _engine.waveform(deckIndex);
     d.waveMin = wave.min;
     d.waveMax = wave.max;
+    d.bandDetail = _engine.waveBands(deckIndex, overview: false);
+    d.bandOverview = _engine.waveBands(deckIndex, overview: true);
+    d.bandsPerSec = _engine.waveBandsPerSec;
     _engine.setRate(deckIndex, 1);
     _nudgeBend[deckIndex] = 0;
     _engine.setGain(deckIndex, d.gain);

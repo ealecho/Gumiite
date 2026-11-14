@@ -211,6 +211,8 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 children: [
                   Expanded(flex: 5, child: _waveDeck(0, SideDeckTheme.accentA)),
+                  // Shared center line: deck A's detail rises to it, deck B's hangs from it.
+                  const SizedBox(height: 1, child: ColoredBox(color: Color(0xFF323232))),
                   Expanded(flex: 5, child: _waveDeck(1, SideDeckTheme.accentB)),
                   if (dj.externalMixer)
                     _mixerBar()
@@ -252,10 +254,33 @@ class _HomePageState extends State<HomePage> {
         ? '${d.title}   ${_bpmLabel(d)}   ${formatKey(d.key)}   −${formatDuration(remaining)}'
         : 'Deck ${i == 0 ? 'A' : 'B'} — tap to load a track';
 
+    final hang = i == 1;
+    // Deck B is drawn upside down relative to deck A (overview at the bottom),
+    // so its overlays mirror vertically: top and bottom insets swap.
+    Positioned at({
+      double? left,
+      double? right,
+      double? width,
+      double? top,
+      double? bottom,
+      required Widget child,
+    }) {
+      return Positioned(
+        left: left,
+        right: right,
+        width: width,
+        top: hang ? bottom : top,
+        bottom: hang ? top : bottom,
+        child: child,
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+      padding: hang
+          ? const EdgeInsets.fromLTRB(4, 0, 4, 2)
+          : const EdgeInsets.fromLTRB(4, 2, 4, 0),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(2),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final overview = WaveformPainter.overviewH;
@@ -279,14 +304,15 @@ class _HomePageState extends State<HomePage> {
               fit: StackFit.expand,
               children: [
                 WaveformView(
-                  min: d.waveMin,
-                  max: d.waveMax,
+                  detail: d.bandDetail,
+                  overview: d.bandOverview,
+                  columnsPerSec: d.bandsPerSec,
+                  hangDown: hang,
                   position: d.position,
                   duration: d.duration,
                   beatOffset: d.beatOffset,
                   bpm: d.bpm,
                   rate: d.rate,
-                  color: accent,
                   loopEnabled: d.loopEnabled,
                   loopStart: d.loopStart,
                   loopEnd: d.loopEnd,
@@ -300,7 +326,7 @@ class _HomePageState extends State<HomePage> {
                       onTap: _openLibrary,
                     ),
                   ),
-                Positioned(
+                at(
                   left: play + 8,
                   right: d.loaded ? 88 : 8,
                   top: overview + 3,
@@ -322,14 +348,14 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 if (d.loaded)
-                  Positioned(
+                  at(
                     left: pad,
                     top: overview,
                     bottom: 0,
                     child: Center(child: _play(i, d.playing, accent, play)),
                   ),
                 if (d.loaded)
-                  Positioned(
+                  at(
                     right: pad,
                     bottom: pad,
                     child: Row(
@@ -359,20 +385,20 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 if (d.loaded)
-                  Positioned(
+                  at(
                     right: 4,
                     top: overview + 2,
                     child: _gridButton(i, accent),
                   ),
                 if (d.loaded && _gridEditDeck == i)
-                  Positioned(
+                  at(
                     left: play + 8,
                     right: nudgeFoot,
                     bottom: 4,
                     child: _gridEditorBar(i, accent),
                   ),
                 if (d.loaded && _gridEditDeck != i && loopGap > 0)
-                  Positioned(
+                  at(
                     left: playFoot,
                     width: loopGap,
                     bottom: pad,
@@ -381,7 +407,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 if (d.loaded && _gridEditDeck != i && bpmGap > 0)
-                  Positioned(
+                  at(
                     left: WaveformPainter.jumpZoneRight(w),
                     width: bpmGap,
                     bottom: pad,

@@ -35,6 +35,8 @@ typedef _NudgeC = Void Function(Pointer<Void>, Int32, Float);
 typedef _SetLoopC = Void Function(Pointer<Void>, Int32, Int32, Float);
 typedef _BeatJumpC = Void Function(Pointer<Void>, Int32, Int32);
 typedef _WaveBinsC = Int32 Function();
+typedef _BandColumnsC = Int32 Function(Pointer<Void>, Int32, Int32);
+typedef _BandCopyC = Int32 Function(Pointer<Void>, Int32, Int32, Pointer<Uint8>, Int32);
 typedef _WaveCopyC = Int32 Function(
   Pointer<Void>,
   Int32,
@@ -155,6 +157,18 @@ class NativeEngine {
           int,
         )
       >('dj_waveform_copy');
+  late final _bandsPerSec = _lib.lookupFunction<_WaveBinsC, int Function()>(
+    'dj_wave_bands_per_sec',
+  );
+  late final _bandColumns = _lib
+      .lookupFunction<_BandColumnsC, int Function(Pointer<Void>, int, int)>(
+        'dj_wave_bands_columns',
+      );
+  late final _bandCopy = _lib
+      .lookupFunction<
+        _BandCopyC,
+        int Function(Pointer<Void>, int, int, Pointer<Uint8>, int)
+      >('dj_wave_bands_copy');
 
   static NativeEngine open() {
     late final DynamicLibrary lib;
@@ -264,6 +278,22 @@ class NativeEngine {
     } finally {
       malloc.free(minPtr);
       malloc.free(maxPtr);
+    }
+  }
+
+  /// Detail columns per second of track in [waveBands] (overview: false).
+  int get waveBandsPerSec => _bandsPerSec();
+
+  /// Interleaved low/mid/high bytes (0..127) per column.
+  Uint8List waveBands(int deck, {required bool overview}) {
+    final cols = _bandColumns(_handle, deck, overview ? 1 : 0);
+    if (cols <= 0) return Uint8List(0);
+    final ptr = malloc<Uint8>(cols * 3);
+    try {
+      final n = _bandCopy(_handle, deck, overview ? 1 : 0, ptr, cols);
+      return Uint8List.fromList(ptr.asTypedList(n * 3));
+    } finally {
+      malloc.free(ptr);
     }
   }
 }

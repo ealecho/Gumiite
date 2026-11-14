@@ -121,6 +121,8 @@ struct Deck {
 
   std::vector<float> waveMin;
   std::vector<float> waveMax;
+  std::vector<uint8_t> bandDetail;    // wave_bands::kDetailPerSec columns/s, low/mid/high
+  std::vector<uint8_t> bandOverview;  // wave_bands::kOverviewColumns columns, low/mid/high
 
   LR4 eqLoL, eqLoR;         // LPF @ 246 Hz
   LR4 eqMidHpL, eqMidHpR;   // HPF @ 246 Hz
@@ -1026,6 +1028,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   d.cache.hintEngineFrames(0, (int64_t)sr * 2);
 
   std::vector<float> wmin, wmax;
+  std::vector<uint8_t> bandDetail, bandOverview;
   {
     StreamingDecoder scan;
     if (!scan.open(path)) {
@@ -1035,7 +1038,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
       }
       return 0;
     }
-    scanWaveform(scan, kWaveformBins, wmin, wmax);
+    scanWaveform(scan, kWaveformBins, wmin, wmax, bandDetail, bandOverview);
   }
 
   d.cache.waitChunk(0, 2500);
@@ -1054,6 +1057,8 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   d.beatOffset = analysis.beatOffsetSec;
   d.waveMin = std::move(wmin);
   d.waveMax = std::move(wmax);
+  d.bandDetail = std::move(bandDetail);
+  d.bandOverview = std::move(bandOverview);
   d.flushStretcher();
   d.resetFilters();
   d.ensureStretcher();
@@ -1119,6 +1124,8 @@ void dj_unload(DjEngine engine, int deck) {
     d.pauseXf = false;
     d.waveMin.clear();
     d.waveMax.clear();
+    d.bandDetail.clear();
+    d.bandOverview.clear();
     d.totalFrames = 0;
     d.path.clear();
   }
@@ -1416,6 +1423,31 @@ int dj_waveform_copy(DjEngine engine, int deck, float* min_out, float* max_out, 
   }
   std::memcpy(min_out, d.waveMin.data(), sizeof(float) * n);
   std::memcpy(max_out, d.waveMax.data(), sizeof(float) * n);
+  return n;
+}
+
+int dj_wave_bands_per_sec(void) { return wave_bands::kDetailPerSec; }
+
+int dj_wave_bands_columns(DjEngine engine, int deck, int overview) {
+  if (deck < 0 || deck > 1) {
+    return 0;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  return (int)((overview ? d.bandOverview : d.bandDetail).size() / 3);
+}
+
+int dj_wave_bands_copy(DjEngine engine, int deck, int overview, uint8_t* out, int columns) {
+  if (deck < 0 || deck > 1 || !out || columns <= 0) {
+    return 0;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  const auto& src = overview ? d.bandOverview : d.bandDetail;
+  const int n = std::min(columns, (int)(src.size() / 3));
+  if (n > 0) {
+    std::memcpy(out, src.data(), (size_t)n * 3);
+  }
   return n;
 }
 
