@@ -11,8 +11,12 @@ import 'package:flutter/material.dart';
 /// from the bottom edge; with [hangDown] true (deck B) the overview moves to the
 /// bottom and the detail hangs from the top edge, so two decks stacked on top of
 /// each other meet at a shared center line.
+/// Which parts of the waveform a [WaveformView] draws.
+enum WavePart { both, overview, detail }
+
 class WaveformPainter extends CustomPainter {
   WaveformPainter({
+    this.part = WavePart.both,
     required this.detail,
     required this.overview,
     required this.columnsPerSec,
@@ -29,6 +33,7 @@ class WaveformPainter extends CustomPainter {
     this.showJumpZone = false,
   });
 
+  final WavePart part;
   final Uint8List detail;
   final Uint8List overview;
   final int columnsPerSec;
@@ -47,6 +52,7 @@ class WaveformPainter extends CustomPainter {
   final bool showJumpZone;
 
   static const overviewH = 26.0;
+  static const _detailHeadroom = 0.82;
   static const _overviewWaveH = 19.0;
   static const _positionBarH = 3.0;
 
@@ -74,14 +80,22 @@ class WaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawRect(Offset.zero & size, Paint()..color = _bg);
-    if (duration <= 0 || size.width <= 1 || size.height <= overviewH + 2) {
+    if (duration <= 0 || size.width <= 1 || size.height <= 2) {
       return;
     }
-    final overviewTop = hangDown ? size.height - overviewH : 0.0;
-    final detailTop = hangDown ? 0.0 : overviewH;
-    final detailBottom = hangDown ? size.height - overviewH : size.height;
-    _paintOverview(canvas, size.width, overviewTop);
-    _paintDetail(canvas, size.width, detailTop, detailBottom);
+    switch (part) {
+      case WavePart.overview:
+        _paintOverview(canvas, size.width, 0);
+      case WavePart.detail:
+        _paintDetail(canvas, size.width, 0, size.height);
+      case WavePart.both:
+        if (size.height <= overviewH + 2) return;
+        final overviewTop = hangDown ? size.height - overviewH : 0.0;
+        final detailTop = hangDown ? 0.0 : overviewH;
+        final detailBottom = hangDown ? size.height - overviewH : size.height;
+        _paintOverview(canvas, size.width, overviewTop);
+        _paintDetail(canvas, size.width, detailTop, detailBottom);
+    }
   }
 
   void _paintOverview(Canvas canvas, double width, double top) {
@@ -94,7 +108,7 @@ class WaveformPainter extends CustomPainter {
       for (var c = 0; c < cols; c++) {
         norm = math.max(norm, overview[c * 3] / 128);
         norm = math.max(norm, overview[c * 3 + 1] / 256);
-        norm = math.max(norm, overview[c * 3 + 2] / 128);
+        norm = math.max(norm, overview[c * 3 + 2] / 256);
       }
       final fill = norm > 0 ? 1 / norm : 1.0;
       final low = Path(), mid = Path(), high = Path();
@@ -108,7 +122,8 @@ class WaveformPainter extends CustomPainter {
           m = math.max(m, overview[c * 3 + 1]);
           h = math.max(h, overview[c * 3 + 2]);
         }
-        // Stacked from the baseline; mid draws at half weight, as in rbxport.
+        // Stacked from the baseline. rbxport draws mid at half weight; highs are
+        // halved too here, or the cream layer hides the low/mid layers.
         void bar(Path p, int v, double scale) {
           if (v == 0) return;
           final hh = math.min(v / scale * fill, 1.0) * _overviewWaveH;
@@ -117,7 +132,7 @@ class WaveformPainter extends CustomPainter {
 
         bar(low, l, 128);
         bar(mid, m, 256);
-        bar(high, h, 128);
+        bar(high, h, 256);
       }
       canvas.drawPath(low, Paint()..color = _bandColours[1]!);
       canvas.drawPath(mid, Paint()..color = _bandColours[2]!);
@@ -254,7 +269,8 @@ class WaveformPainter extends CustomPainter {
     int mid,
     int high,
   ) {
-    double reach(int v) => v == 0 ? 0 : math.max(0.5, v / 127 * full);
+    // Leave headroom so loud passages don't all read as full scale.
+    double reach(int v) => v == 0 ? 0 : math.max(0.5, v / 127 * full * _detailHeadroom);
     final bands = [(1, reach(low)), (2, reach(mid)), (4, reach(high))]
       ..sort((a, b) => b.$2.compareTo(a.$2));
     var mask = 0;
@@ -365,7 +381,8 @@ class WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant WaveformPainter oldDelegate) {
-    return oldDelegate.position != position ||
+    return oldDelegate.part != part ||
+        oldDelegate.position != position ||
         oldDelegate.duration != duration ||
         oldDelegate.detail != detail ||
         oldDelegate.overview != overview ||
@@ -383,6 +400,7 @@ class WaveformPainter extends CustomPainter {
 class WaveformView extends StatelessWidget {
   const WaveformView({
     super.key,
+    this.part = WavePart.both,
     required this.detail,
     required this.overview,
     required this.columnsPerSec,
@@ -399,6 +417,7 @@ class WaveformView extends StatelessWidget {
     this.onOverviewSeek,
   });
 
+  final WavePart part;
   final Uint8List detail;
   final Uint8List overview;
   final int columnsPerSec;
@@ -428,6 +447,7 @@ class WaveformView extends StatelessWidget {
             : 88.0;
         final paint = CustomPaint(
           painter: WaveformPainter(
+            part: part,
             detail: detail,
             overview: overview,
             columnsPerSec: columnsPerSec,
@@ -452,9 +472,12 @@ class WaveformView extends StatelessWidget {
           onTapDown: (d) {
             final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
             final y = d.localPosition.dy;
-            final inOverview = hangDown
-                ? y > h - WaveformPainter.overviewH
-                : y < WaveformPainter.overviewH;
+            final inOverview = switch (part) {
+              WavePart.overview => true,
+              WavePart.detail => false,
+              WavePart.both =>
+                hangDown ? y > h - WaveformPainter.overviewH : y < WaveformPainter.overviewH,
+            };
             if (inOverview) {
               onOverviewSeek?.call(nx * duration);
               return;
