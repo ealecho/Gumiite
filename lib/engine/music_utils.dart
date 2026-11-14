@@ -65,16 +65,31 @@ String camelotMinor(int root) {
   return '${major.substring(0, major.length - 1)}A';
 }
 
+/// How keys are written: Camelot ("10A"), musical ("Bm"), or both ("Bm / 10A").
+enum KeyNotation { camelot, musical, both }
+
+/// App-wide key notation, set from Settings via DjController.setKeyNotation.
+KeyNotation keyNotation = KeyNotation.camelot;
+
 /// [key] 0..11 major, 12..23 minor, else unknown.
 String formatKey(int key) {
+  final String musical;
+  final String camelot;
   if (key >= 0 && key <= 11) {
-    return '${keyNames[key]} / ${camelotMajor[key]}';
-  }
-  if (key >= 12 && key <= 23) {
+    musical = keyNames[key];
+    camelot = camelotMajor[key];
+  } else if (key >= 12 && key <= 23) {
     final root = key - 12;
-    return '${keyNames[root]}m / ${camelotMinor(root)}';
+    musical = '${keyNames[root]}m';
+    camelot = camelotMinor(root);
+  } else {
+    return '—';
   }
-  return '—';
+  return switch (keyNotation) {
+    KeyNotation.camelot => camelot,
+    KeyNotation.musical => musical,
+    KeyNotation.both => '$musical / $camelot',
+  };
 }
 
 String formatDuration(double seconds) {

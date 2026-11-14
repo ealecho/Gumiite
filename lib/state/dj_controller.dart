@@ -3,7 +3,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/analysis_cache.dart';
+import 'package:sidedeck/engine/music_utils.dart' as music;
+import 'package:sidedeck/engine/music_utils.dart' show KeyNotation;
 import 'package:sidedeck/engine/native_engine.dart';
 import 'package:sidedeck/engine/track_analyzer.dart';
 import 'package:sidedeck/engine/usb_output.dart';
@@ -52,6 +55,28 @@ class DjController extends ChangeNotifier {
       engineError = 'Audio engine failed to start.';
     }
     _usbSub = UsbOutput.events().listen(_onUsbEvent);
+    _loadKeyNotation();
+  }
+
+  static const _keyNotationPref = 'key_notation';
+
+  KeyNotation get keyNotation => music.keyNotation;
+
+  Future<void> _loadKeyNotation() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_keyNotationPref);
+    final match = KeyNotation.values.where((n) => n.name == saved);
+    if (match.isEmpty) return;
+    music.keyNotation = match.first;
+    notifyListeners();
+  }
+
+  /// Key display style for decks and library; saved across launches.
+  Future<void> setKeyNotation(KeyNotation notation) async {
+    music.keyNotation = notation;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyNotationPref, notation.name);
   }
 
   late final NativeEngine _engine;

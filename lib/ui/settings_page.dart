@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sidedeck/engine/music_utils.dart';
 import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/subsonic/subsonic_client.dart';
@@ -108,6 +109,30 @@ class _SettingsPageState extends State<SettingsPage> {
                 messenger.showSnackBar(SnackBar(content: Text(err)));
                 widget.dj.clearError();
               }
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
+            'Key display',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'How track keys appear on the decks and in the library.',
+            style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<KeyNotation>(
+            segments: const [
+              ButtonSegment(value: KeyNotation.camelot, label: Text('Camelot · 10A')),
+              ButtonSegment(value: KeyNotation.musical, label: Text('Musical · Bm')),
+              ButtonSegment(value: KeyNotation.both, label: Text('Both · Bm / 10A')),
+            ],
+            selected: {widget.dj.keyNotation},
+            showSelectedIcon: false,
+            onSelectionChanged: (s) async {
+              await widget.dj.setKeyNotation(s.first);
+              if (mounted) setState(() {});
             },
           ),
           const Divider(height: 32),
