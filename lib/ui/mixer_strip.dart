@@ -2,35 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 
-/// Mixer under the waveforms: taller EQ/filter faders, xfader, library/settings.
+/// Mixer under the waveforms: taller EQ/filter faders and the xfader. Not shown
+/// in external mixer mode; library/settings live in the deck rails.
 class MixerStrip extends StatelessWidget {
-  const MixerStrip({
-    super.key,
-    required this.controller,
-    required this.onLibrary,
-    required this.onSettings,
-  });
+  const MixerStrip({super.key, required this.controller});
 
   final DjController controller;
-  final VoidCallback onLibrary;
-  final VoidCallback onSettings;
 
   @override
   Widget build(BuildContext context) {
-    if (controller.externalMixer) {
-      return ColoredBox(
-        color: SideDeckTheme.panel,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-          child: _externalCenter(),
-        ),
-      );
-    }
-
     final a = controller.deckA;
     final b = controller.deckB;
 
@@ -52,13 +35,7 @@ class MixerStrip extends StatelessWidget {
   Widget _center() {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _iconBtn(Icons.library_music, 'Library', onLibrary),
-            _iconBtn(Icons.settings_outlined, 'Settings', onSettings),
-          ],
-        ),
+        const SizedBox(height: 8),
         const Text(
           'CROSSFADER',
           style: TextStyle(
@@ -80,53 +57,6 @@ class MixerStrip extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _externalCenter() {
-    final name = UsbOutput.deviceLabel(controller.usbDeviceName);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _iconBtn(Icons.library_music, 'Library', onLibrary),
-              _iconBtn(Icons.settings_outlined, 'Settings', onSettings),
-            ],
-          ),
-          const Text(
-            'EXTERNAL MIXER',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 9,
-              letterSpacing: 1.0,
-              color: SideDeckTheme.muted,
-            ),
-          ),
-          if (name.isNotEmpty)
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 10, color: SideDeckTheme.text),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onTap) {
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
-      onPressed: onTap,
-      icon: Icon(icon, size: 22),
     );
   }
 

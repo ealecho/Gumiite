@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sidedeck/engine/music_utils.dart';
+import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 import 'package:sidedeck/ui/mixer_strip.dart';
@@ -17,6 +18,8 @@ class DeckPanel extends StatelessWidget {
     required this.gridEditing,
     required this.onToggleGrid,
     required this.onLoad,
+    required this.onLibrary,
+    required this.onSettings,
   });
 
   final DjController controller;
@@ -24,6 +27,8 @@ class DeckPanel extends StatelessWidget {
   final bool gridEditing;
   final VoidCallback onToggleGrid;
   final VoidCallback onLoad;
+  final VoidCallback onLibrary;
+  final VoidCallback onSettings;
 
   static const _railW = 60.0;
   static const _rowH = 30.0;
@@ -97,13 +102,55 @@ class DeckPanel extends StatelessWidget {
         style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
       ),
     );
+    // Library on deck A's rail, settings on deck B's: the rails have room, and
+    // in external mixer mode there is no mixer strip to hold them.
+    final tool = index == 0
+        ? _railIcon(Icons.library_music, 'Library', onLibrary)
+        : _railIcon(Icons.settings_outlined, 'Settings', onSettings);
+    final external = index == 0 && controller.externalMixer;
     final children = <Widget>[
-      Padding(padding: const EdgeInsets.all(4), child: Align(alignment: Alignment.centerLeft, child: tag)),
+      Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(children: [tag, const Spacer(), tool]),
+      ),
+      if (external) _usbChip(),
       Expanded(child: Center(child: _playButton(d))),
     ];
     return ColoredBox(
       color: SideDeckTheme.deckRow,
       child: Column(children: _hang ? children.reversed.toList() : children),
+    );
+  }
+
+  Widget _railIcon(IconData icon, String tooltip, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: InkResponse(
+        onTap: onTap,
+        radius: 18,
+        child: Icon(icon, size: 20, color: const Color(0xFFA0A0A0)),
+      ),
+    );
+  }
+
+  /// External mixer status, kept to one small line: the blue outline marks it
+  /// as the USB output, so only the device name is spelled out.
+  Widget _usbChip() {
+    final name = UsbOutput.deviceLabel(controller.usbDeviceName);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+      decoration: BoxDecoration(
+        border: Border.all(color: SideDeckTheme.deckLit),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
+      ),
     );
   }
 

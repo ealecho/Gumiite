@@ -213,10 +213,8 @@ class _HomePageState extends State<HomePage> {
                   // Shared center line: deck A's detail rises to it, deck B's hangs from it.
                   const SizedBox(height: 1, child: ColoredBox(color: Color(0xFF323232))),
                   Expanded(flex: 6, child: _deck(1)),
-                  if (dj.externalMixer)
-                    _mixerBar()
-                  else
-                    Expanded(flex: 5, child: _mixerBar(expand: true)),
+                  // External mixer: the hardware mixes, so the decks get the whole screen.
+                  if (!dj.externalMixer) Expanded(flex: 5, child: _mixerBar()),
                 ],
               ),
             ),
@@ -226,15 +224,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _mixerBar({bool expand = false}) {
+  Widget _mixerBar() {
     return Stack(
-      fit: expand ? StackFit.expand : StackFit.loose,
+      fit: StackFit.expand,
       children: [
-        MixerStrip(
-          controller: _djReady,
-          onLibrary: _openLibrary,
-          onSettings: _openSettings,
-        ),
+        MixerStrip(controller: _djReady),
         if (_gridEditDeck != null)
           Positioned.fill(
             child: GestureDetector(
@@ -253,6 +247,8 @@ class _HomePageState extends State<HomePage> {
       gridEditing: _gridEditDeck == i,
       onToggleGrid: () => setState(() => _gridEditDeck = _gridEditDeck == i ? null : i),
       onLoad: _openLibrary,
+      onLibrary: _openLibrary,
+      onSettings: _openSettings,
     );
   }
 }
