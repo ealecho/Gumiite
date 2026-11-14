@@ -53,8 +53,10 @@ class DeckPanel extends StatelessWidget {
       loopEnabled: d.loopEnabled,
       loopStart: d.loopStart,
       loopEnd: d.loopEnd,
+      cuePoint: d.loaded ? d.cuePoint : -1,
       onSeek: d.loaded && !gridEditing ? (t) => controller.seek(index, t) : null,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
+      onScrub: d.loaded && !gridEditing ? (t) => controller.seekTo(index, t) : null,
     );
 
     Widget detail = wave(WavePart.detail);
@@ -114,7 +116,15 @@ class DeckPanel extends StatelessWidget {
         child: Row(children: [tag, const Spacer(), tool]),
       ),
       if (external) _usbChip(),
-      Expanded(child: Center(child: _playButton(d))),
+      Expanded(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [_cueButton(d), const SizedBox(height: 8), _playButton(d)],
+          ),
+        ),
+      ),
     ];
     return ColoredBox(
       color: SideDeckTheme.deckRow,
@@ -151,6 +161,39 @@ class DeckPanel extends StatelessWidget {
         textAlign: TextAlign.center,
         style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
       ),
+    );
+  }
+
+  /// CDJ-style CUE (see DjController.cueDown): reacts on press, and release
+  /// ends a cue preview, so it is a raw pointer listener rather than a tap.
+  Widget _cueButton(DeckState d) {
+    const ring = Color(0xFFEDB751);
+    final face = Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: d.cuePreview ? ring : Colors.black,
+        shape: BoxShape.circle,
+        border: Border.all(color: d.loaded ? ring : SideDeckTheme.deckOutline, width: 2),
+      ),
+      child: Text(
+        'CUE',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: !d.loaded
+              ? SideDeckTheme.deckOutline
+              : (d.cuePreview ? Colors.black : Colors.white),
+        ),
+      ),
+    );
+    if (!d.loaded) return face;
+    return Listener(
+      onPointerDown: (_) => controller.cueDown(index),
+      onPointerUp: (_) => controller.cueUp(index),
+      onPointerCancel: (_) => controller.cueUp(index),
+      child: face,
     );
   }
 

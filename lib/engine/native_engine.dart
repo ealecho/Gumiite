@@ -82,6 +82,10 @@ class NativeEngine {
       .lookupFunction<_UnloadC, void Function(Pointer<Void>, int)>('dj_unload');
   late final _play = _lib
       .lookupFunction<_PlayC, void Function(Pointer<Void>, int, int)>('dj_play');
+  late final _setCue = _lib
+      .lookupFunction<_UnloadC, void Function(Pointer<Void>, int)>('dj_set_cue');
+  late final _jumpCue = _lib
+      .lookupFunction<_UnloadC, void Function(Pointer<Void>, int)>('dj_jump_cue');
   late final _seek = _lib
       .lookupFunction<_SeekC, void Function(Pointer<Void>, int, double)>('dj_seek');
   late final _position = _lib
@@ -243,6 +247,9 @@ class NativeEngine {
 
   void unload(int deck) => _unload(_handle, deck);
   void play(int deck, bool playing) => _play(_handle, deck, playing ? 1 : 0);
+  /// Cue point = the current playhead.
+  void setCue(int deck) => _setCue(_handle, deck);
+  void jumpCue(int deck) => _jumpCue(_handle, deck);
   void seek(int deck, double seconds) => _seek(_handle, deck, seconds);
   double position(int deck) => _position(_handle, deck);
   double duration(int deck) => _duration(_handle, deck);

@@ -24,6 +24,10 @@ class DeckState {
   int key = -1;
   double rate = 1;
   bool synced = false;
+  /// Main cue point (seconds); the engine resets it to 0 on load.
+  double cuePoint = 0;
+  /// Playing only while CUE is held from the cue point (CDJ cue preview).
+  bool cuePreview = false;
   double beatOffset = 0;
   double gain = 1;
   double fader = 1;
@@ -189,6 +193,8 @@ class DjController extends ChangeNotifier {
     d.loaded = true;
     d.playing = false;
     d.position = 0;
+    d.cuePoint = 0;
+    d.cuePreview = false;
     d.duration = _engine.duration(deckIndex);
     d.bpm = _engine.bpm(deckIndex);
     d.key = _engine.key(deckIndex);
@@ -256,9 +262,50 @@ class DjController extends ChangeNotifier {
   void playPause(int deckIndex) {
     final d = deck(deckIndex);
     if (!d.loaded) return;
+    if (d.cuePreview) {
+      // PLAY during a cue preview keeps it playing once CUE is let go.
+      d.cuePreview = false;
+      notifyListeners();
+      return;
+    }
     final next = !d.playing;
     _engine.play(deckIndex, next);
     d.playing = next;
+    notifyListeners();
+  }
+
+  /// CDJ-style CUE press. Playing: back to the cue point and pause. Paused on
+  /// the cue point: preview from it while held. Paused elsewhere: set the cue
+  /// point here (drag the waveform to find the spot first).
+  void cueDown(int deckIndex) {
+    final d = deck(deckIndex);
+    if (!d.loaded) return;
+    if (d.playing) {
+      _engine.jumpCue(deckIndex);
+      _engine.play(deckIndex, false);
+      d.playing = false;
+      d.position = d.cuePoint;
+    } else if ((d.position - d.cuePoint).abs() < 0.02) {
+      _engine.play(deckIndex, true);
+      d.playing = true;
+      d.cuePreview = true;
+    } else {
+      _engine.setCue(deckIndex);
+      d.cuePoint = _engine.position(deckIndex);
+      d.position = d.cuePoint;
+    }
+    notifyListeners();
+  }
+
+  /// CUE release: ends a preview by returning to the cue point.
+  void cueUp(int deckIndex) {
+    final d = deck(deckIndex);
+    if (!d.cuePreview) return;
+    d.cuePreview = false;
+    _engine.play(deckIndex, false);
+    _engine.jumpCue(deckIndex);
+    d.playing = false;
+    d.position = d.cuePoint;
     notifyListeners();
   }
 

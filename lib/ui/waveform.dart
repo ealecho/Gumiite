@@ -29,6 +29,7 @@ class WaveformPainter extends CustomPainter {
     this.loopEnabled = false,
     this.loopStart = 0,
     this.loopEnd = 0,
+    this.cuePoint = -1,
     this.zoomWindowSec = 8,
     this.showJumpZone = false,
   });
@@ -48,10 +49,13 @@ class WaveformPainter extends CustomPainter {
   final bool loopEnabled;
   final double loopStart;
   final double loopEnd;
+  /// Main cue point in seconds; negative hides the marker.
+  final double cuePoint;
   final double zoomWindowSec;
   final bool showJumpZone;
 
   static const overviewH = 26.0;
+  static const _cue = Color(0xFFEA3323);
   static const _detailHeadroom = 0.82;
   static const _overviewWaveH = 19.0;
   static const _positionBarH = 3.0;
@@ -159,10 +163,42 @@ class WaveformPainter extends CustomPainter {
       Paint()..color = _barPlayed,
     );
 
+    if (cuePoint >= 0) {
+      final cx = (cuePoint / duration * width).clamp(0.0, width);
+      canvas.drawPath(
+        Path()
+          ..moveTo(cx - 5, top)
+          ..lineTo(cx + 5, top)
+          ..lineTo(cx, top + 7)
+          ..close(),
+        Paint()..color = _cue,
+      );
+    }
+
     final x = width * progress;
     canvas.drawRect(
       Rect.fromLTWH(x - 1, top, 2, overviewH),
       Paint()..color = _playhead,
+    );
+  }
+
+  /// Cue marker on the detail: a line plus a triangle on the deck's outer
+  /// edge (top for deck A, bottom for deck B), pointing into the wave.
+  void _paintCue(Canvas canvas, double width, double top, double bottom, double x) {
+    if (x < -8 || x > width + 8) return;
+    canvas.drawRect(
+      Rect.fromLTRB(x - 0.75, top, x + 0.75, bottom),
+      Paint()..color = _cue.withValues(alpha: 0.85),
+    );
+    final edge = hangDown ? bottom : top;
+    final tip = hangDown ? bottom - 11 : top + 11;
+    canvas.drawPath(
+      Path()
+        ..moveTo(x - 8, edge)
+        ..lineTo(x + 8, edge)
+        ..lineTo(x, tip)
+        ..close(),
+      Paint()..color = _cue,
     );
   }
 
@@ -216,6 +252,7 @@ class WaveformPainter extends CustomPainter {
     }
 
     _paintGrid(canvas, width, top, bottom, viewStart, viewDur, xForTime);
+    if (cuePoint >= 0) _paintCue(canvas, width, top, bottom, xForTime(cuePoint));
 
     if (showJumpZone) {
       _drawJumpZone(canvas, width, top, bottom);
@@ -393,11 +430,12 @@ class WaveformPainter extends CustomPainter {
         oldDelegate.loopEnabled != loopEnabled ||
         oldDelegate.loopStart != loopStart ||
         oldDelegate.loopEnd != loopEnd ||
+        oldDelegate.cuePoint != cuePoint ||
         oldDelegate.showJumpZone != showJumpZone;
   }
 }
 
-class WaveformView extends StatelessWidget {
+class WaveformView extends StatefulWidget {
   const WaveformView({
     super.key,
     this.part = WavePart.both,
@@ -413,8 +451,10 @@ class WaveformView extends StatelessWidget {
     this.loopEnabled = false,
     this.loopStart = 0,
     this.loopEnd = 0,
+    this.cuePoint = -1,
     this.onSeek,
     this.onOverviewSeek,
+    this.onScrub,
   });
 
   final WavePart part;
@@ -430,15 +470,37 @@ class WaveformView extends StatelessWidget {
   final bool loopEnabled;
   final double loopStart;
   final double loopEnd;
+  final double cuePoint;
   /// Zoomed jump-zone tap (typically ±4 beat jump toward the tap).
   final ValueChanged<double>? onSeek;
-  /// Full-track overview strip tap → absolute position in seconds.
+  /// Full-track overview strip tap or drag → absolute position in seconds.
   final ValueChanged<double>? onOverviewSeek;
+  /// Detail drag → absolute position in seconds, moving the track with the
+  /// finger like a record.
+  final ValueChanged<double>? onScrub;
 
   static const zoom = 8.0;
 
   @override
+  State<WaveformView> createState() => _WaveformViewState();
+}
+
+class _WaveformViewState extends State<WaveformView> {
+  double _dragFrom = 0;
+  double _dragDx = 0;
+  // State, not a builder local: the view rebuilds every tick mid-drag.
+  bool _dragOverview = false;
+
+  bool _inOverview(double y, double h) => switch (widget.part) {
+    WavePart.overview => true,
+    WavePart.detail => false,
+    WavePart.both =>
+      widget.hangDown ? y > h - WaveformPainter.overviewH : y < WaveformPainter.overviewH,
+  };
+
+  @override
   Widget build(BuildContext context) {
+    final w0 = widget;
     return LayoutBuilder(
       builder: (context, constraints) {
         final w = constraints.maxWidth.isFinite ? constraints.maxWidth : 300.0;
@@ -447,47 +509,64 @@ class WaveformView extends StatelessWidget {
             : 88.0;
         final paint = CustomPaint(
           painter: WaveformPainter(
-            part: part,
-            detail: detail,
-            overview: overview,
-            columnsPerSec: columnsPerSec,
-            position: position,
-            duration: duration,
-            hangDown: hangDown,
-            beatOffset: beatOffset,
-            bpm: bpm,
-            rate: rate,
-            loopEnabled: loopEnabled,
-            loopStart: loopStart,
-            loopEnd: loopEnd,
-            zoomWindowSec: zoom,
-            showJumpZone: onSeek != null,
+            part: w0.part,
+            detail: w0.detail,
+            overview: w0.overview,
+            columnsPerSec: w0.columnsPerSec,
+            position: w0.position,
+            duration: w0.duration,
+            hangDown: w0.hangDown,
+            beatOffset: w0.beatOffset,
+            bpm: w0.bpm,
+            rate: w0.rate,
+            loopEnabled: w0.loopEnabled,
+            loopStart: w0.loopStart,
+            loopEnd: w0.loopEnd,
+            cuePoint: w0.cuePoint,
+            zoomWindowSec: WaveformView.zoom,
+            showJumpZone: w0.onSeek != null,
           ),
           size: Size(w, h),
         );
-        if ((onSeek == null && onOverviewSeek == null) || duration <= 0) {
+        final interactive =
+            w0.onSeek != null || w0.onOverviewSeek != null || w0.onScrub != null;
+        if (!interactive || w0.duration <= 0) {
           return paint;
         }
+        final playRate = w0.rate.clamp(0.5, 2.0);
+        double clampT(double t) => t.clamp(0.0, w0.duration).toDouble();
+
         return GestureDetector(
-          onTapDown: (d) {
+          behavior: HitTestBehavior.opaque,
+          // Tap (not tap-down) so a drag never also fires a beat jump.
+          onTapUp: (d) {
             final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
-            final y = d.localPosition.dy;
-            final inOverview = switch (part) {
-              WavePart.overview => true,
-              WavePart.detail => false,
-              WavePart.both =>
-                hangDown ? y > h - WaveformPainter.overviewH : y < WaveformPainter.overviewH,
-            };
-            if (inOverview) {
-              onOverviewSeek?.call(nx * duration);
+            if (_inOverview(d.localPosition.dy, h)) {
+              w0.onOverviewSeek?.call(nx * w0.duration);
               return;
             }
+            final onSeek = w0.onSeek;
             if (onSeek == null) return;
             if ((nx - 0.5).abs() > WaveformPainter.jumpHalf) return;
-            final playRate = rate.clamp(0.5, 2.0);
-            final heard = (nx - 0.5) * zoom;
-            final t = position + heard * playRate;
-            onSeek!(t.clamp(0.0, duration).toDouble());
+            final heard = (nx - 0.5) * WaveformView.zoom;
+            onSeek(clampT(w0.position + heard * playRate));
+          },
+          onHorizontalDragStart: (d) {
+            _dragOverview = _inOverview(d.localPosition.dy, h);
+            _dragFrom = w0.position;
+            _dragDx = 0;
+          },
+          onHorizontalDragUpdate: (d) {
+            if (_dragOverview) {
+              final nx = (d.localPosition.dx / w).clamp(0.0, 1.0);
+              w0.onOverviewSeek?.call(nx * w0.duration);
+              return;
+            }
+            final onScrub = w0.onScrub;
+            if (onScrub == null) return;
+            _dragDx += d.delta.dx;
+            // Finger right pulls earlier audio under the playhead.
+            onScrub(clampT(_dragFrom - _dragDx / w * WaveformView.zoom * playRate));
           },
           child: paint,
         );
