@@ -45,6 +45,9 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
   @override
   void initState() {
     super.initState();
+    // The library keeps its filter across openings of this sheet; show it, or
+    // an empty box would sit over a filtered list that clearing can't reset.
+    _search.text = widget.library.query;
     _loadClient();
     widget.library.addListener(_onLib);
     widget.dj.addListener(_onLib);
@@ -128,6 +131,13 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
       setState(() => _remoteError = e.toString());
     } finally {
       if (mounted) setState(() => _remoteLoading = false);
+    }
+  }
+
+  void _onSearchChanged(String v) {
+    if (_tab == 0) widget.library.setQuery(v);
+    if (_tab == 1 && v.trim().isEmpty && _searching) {
+      _loadPlaylists();
     }
   }
 
@@ -314,16 +324,26 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           prefixIcon: const Icon(Icons.search, size: 18),
                           prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _search,
+                            builder: (context, value, _) => value.text.isEmpty
+                                ? const SizedBox.shrink()
+                                : IconButton(
+                                    tooltip: 'Clear',
+                                    icon: const Icon(Icons.close, size: 16),
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () {
+                                      _search.clear();
+                                      _onSearchChanged('');
+                                    },
+                                  ),
+                          ),
+                          suffixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onChanged: (v) {
-                          if (_tab == 0) widget.library.setQuery(v);
-                          if (_tab == 1 && v.trim().isEmpty && _searching) {
-                            _loadPlaylists();
-                          }
-                        },
+                        onChanged: _onSearchChanged,
                         onSubmitted: (v) {
                           if (_tab == 1) _searchRemote(v);
                         },
@@ -525,6 +545,11 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         ),
         onPressed: () {
           setState(() => _tab = i);
+          // One box serves both tabs; back on Local it must show the filter
+          // that is actually applied.
+          if (i == 0 && _search.text != widget.library.query) {
+            _search.text = widget.library.query;
+          }
           if (i == 1 && _client != null && !_searching && _openPlaylist == null && _playlists.isEmpty) {
             _loadPlaylists();
           }
