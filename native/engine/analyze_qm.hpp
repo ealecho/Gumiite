@@ -1,6 +1,7 @@
 #pragma once
 
 #include "beat_utils.hpp"
+#include "grid_fit.hpp"
 #include "grid_phase.hpp"
 #include "dsp/onsets/DetectionFunction.h"
 #include "dsp/tempotracking/TempoTrackV2.h"
@@ -92,7 +93,7 @@ inline AnalysisResult analyzeTrackQueenMary(const float* interleaved, int frames
     }
     out.bpm = analyze_detail::snapDanceBpm((float)tempo.bpm);
 
-    const double periodSec = 60.0 / (double)out.bpm;
+    double periodSec = 60.0 / (double)out.bpm;
     const double duration = (double)frames / (double)sampleRate;
 
     // Queen Mary's phase follows the loudest onset, which is the offbeat hat
@@ -108,6 +109,18 @@ inline AnalysisResult analyzeTrackQueenMary(const float* interleaved, int frames
     }
     if (phaseSec < 0.0) {
       phaseSec += periodSec;
+    }
+
+    // Land the grid on the kick attacks: measures period and phase from the
+    // hits, and keeps Mixxx's rounded BPM only if the audio supports it.
+    if (auto fine = grid_fit::refine(interleaved, frames, ch, (double)sampleRate,
+                                     {phaseSec, periodSec}, false)) {
+      periodSec = fine->period;
+      out.bpm = (float)(60.0 / periodSec);
+      phaseSec = std::fmod(fine->phase, periodSec);
+      if (phaseSec < 0.0) {
+        phaseSec += periodSec;
+      }
     }
 
     out.beatOffsetSec = (float)grid_phase::firstAudibleLine(interleaved, frames, ch,

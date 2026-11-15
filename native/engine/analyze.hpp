@@ -104,6 +104,14 @@ inline void applyKickGrid(AnalysisResult& out, const float* interleaved, int fra
   if (phaseSec < 0.0) {
     phaseSec = 0.0;
   }
+  // Tag BPM is kept as the period; only the phase is pulled onto the kicks.
+  if (auto fine = grid_fit::refine(interleaved, frames, channels, (double)sampleRate,
+                                   {phaseSec, periodSec}, true)) {
+    phaseSec = std::fmod(fine->phase, periodSec);
+    if (phaseSec < 0.0) {
+      phaseSec += periodSec;
+    }
+  }
   out.beatOffsetSec = (float)grid_phase::firstAudibleLine(
       interleaved, frames, channels, (double)sampleRate, phaseSec, periodSec);
   out.beats.clear();

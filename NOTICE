@@ -62,6 +62,7 @@ Mixxx (GNU General Public License 2.0 or later)
   native/engine/dj_engine.cpp (xfader, isolator, filter)
 
 rbxport (GPL-2.0-or-later)
-  native/engine/wave_bands.hpp, lib/ui/waveform.dart
+  native/engine/wave_bands.hpp, native/engine/grid_fit.hpp, lib/ui/waveform.dart
   https://github.com/chrisle/rbxport
-  3-band waveform analysis and rendering, adapted from rbxport's design
+  3-band waveform analysis and rendering, and kick-attack grid fitting,
+  adapted from rbxport
