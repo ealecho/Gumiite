@@ -29,9 +29,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 > changes listed under [What this fork adds](#what-this-fork-adds). Build from
 > this branch to get them.
 
-![Two decks with 3-band waveforms meeting at the centre line, hot cues set](screenshots/decks.png)
-
-![The transport rail (CUE, PLAY, beat jump, quantize), the bar / phrase counter and a "check grid" warning](screenshots/rail.png)
+![Two synced decks on an external mixer: 3-band waveforms meeting at the centre line, bar / phrase counters, transport rails with CUE, PLAY, beat jump and quantize](screenshots/decks.png)
 
 ![The restyled internal mixer](screenshots/mixer.png)
 
