@@ -29,11 +29,13 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 > changes listed under [What this fork adds](#what-this-fork-adds). Build from
 > this branch to get them.
 
-![Two synced decks on an external mixer: 3-band waveforms meeting at the centre line, bar / phrase counters, transport rails with CUE, PLAY, beat jump and quantize](screenshots/decks.png)
+![Two synced decks with the internal mixer hidden: 3-band waveforms meeting at the centre line, bar / phrase counters, auto gain beside the key, and two-column transport rails (CUE over PLAY; beat jump, Q and jump size)](screenshots/decks.png)
 
-![The restyled internal mixer](screenshots/mixer.png)
+![The restyled internal mixer: EQ faders and crossfader (the filter fader is optional)](screenshots/mixer.png)
 
 ![GRID mode on deck A (beat here, bar here, 5 ms, BPM, tap, undo) with the internal mixer hidden](screenshots/grid.png)
+
+![Track details, opened by tapping a deck's title](screenshots/details.png)
 
 ![The library: Local, Remote and USB tabs, Camelot keys (compatible ones coloured), the "check grid" warning, and the filter box](screenshots/library.png)
 
@@ -45,9 +47,10 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 |---|---|
 | External mixer | Fixed silent playback on Samsung/Qualcomm phones; decks take the full screen in external mode |
 | Waveforms | rbxport-style 3-band waveforms, mirrored at a shared centre line; pinch zoom; smooth motion |
-| Deck controls | New control row and transport rail, CUE, hot cues A–D, quantize, beat jump, on-wave nudge |
+| Deck controls | New control row and two-column transport rail, CUE, hot cues A–D, quantize, beat jump, on-wave nudge; tap the title for track details |
 | Navigation | Drag the waveform to scrub; bar / phrase counter |
-| Mixer | Restyled faders with a centre notch and blue offset fill; hide it to give the decks the screen |
+| Mixer | Restyled faders with a centre notch and blue offset fill; filter fader optional; hide it to give the decks the screen |
+| Auto gain | Every track levelled to the same loudness without clipping |
 | Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase |
 | Cues | Cue and hot cues saved per track and restored on load |
 | Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
@@ -94,8 +97,15 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
 - **Control row** between each overview and detail: title and artist, then
   `-MM:SS.t` remaining, `MM:SS.t` elapsed, BPM (0.01), tempo %, key; hot cue pads;
   `½ · LOOP · ×2`; `− · SYNC · +`; `GRID`. Flat rbxport-style buttons that light blue.
-- **Transport rail:** CUE, PLAY, beat-jump ◀◀ ▶▶, **Q** (quantize) and the jump
-  size; small A/B tags; library (deck A) and settings (deck B).
+- **Transport rail,** in two columns: CUE over PLAY, and beside them beat-jump
+  ◀◀ ▶▶, **Q** (quantize) and the jump size; small A/B tags; library (deck A)
+  and settings (deck B). A gap at the centre line keeps deck B's CUE clear of
+  deck A.
+- **Track details:** tap a deck's title for artist, album (rekordbox), length
+  and position, playing and original BPM, tempo and sync, key in musical /
+  Camelot / Open Key, the beat grid and its state, cue and hot cue times,
+  loudness and auto gain, format, size, source and file path. It updates live
+  and the text can be copied.
 - **On-wave nudge:** faint − / + either side of the playhead. Hold while playing
   to bend tempo ±8 %; tap or hold while paused to jog 40 ms.
 - **Bar / phrase counter** beside the playhead, e.g. `33.2 ▸3`: bar 33, beat 2,
@@ -125,6 +135,11 @@ notch, and a blue fill from the centre so any EQ, filter or crossfader move away
 from flat is visible. In external mixer mode the strip is hidden and the decks
 use the whole screen.
 
+The filter fader is off by default, so the strip is EQ and crossfader only and
+gives the decks a little more height. **Settings → On-screen mixer → Filter**
+brings a FILT fader back to each deck (down for low-pass, up for high-pass);
+turning it off resets both filters.
+
 The **▼** above the crossfader hides the internal mixer too, so the decks get
 the whole screen; a slim **▲ MIXER** strip at the bottom brings it back. EQ,
 filter and crossfader keep their settings while hidden, and the choice is
@@ -136,6 +151,16 @@ SYNC matches the synced deck's tempo to the other deck and keeps following it.
 With both decks playing it also shifts the synced deck by under half a beat so
 the beats line up; a synced deck started under a playing deck snaps into phase
 as it starts. It aligns beats, not bars.
+
+### Auto gain
+
+Tracks are levelled to a common loudness, after Mixxx's ReplayGain-based track
+gain, so a mix doesn't jump between quiet and hot masters. While the waveform
+is scanned, SideDeck measures the loud parts (95th percentile of 50 ms RMS
+blocks) and the peak. The deck gain is then trimmed toward -10 dBFS, within
+-12 to +6 dB, and a boost never takes the peak above -0.3 dBFS. The applied
+change shows after the key on the deck (e.g. `-3.0 dB`). On by default; turn
+it off in Settings.
 
 ### Beat grid accuracy
 
@@ -209,6 +234,8 @@ cue colours and comments. It has only been tested on synthetic files so far.
 ### Library and settings
 
 - **Key display** (Settings): Camelot `10A` (default), musical `Bm`, or both.
+- **On-screen mixer** (Settings): show or hide the filter fader.
+- **Auto gain** (Settings): on or off.
 - **Search fix:** the filter could stay active after a search while the box
   looked empty, so other tracks could not be picked. The box now shows the
   active filter and has a clear button.
@@ -221,6 +248,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | Pinch / double-tap | Detail | Zoom / reset zoom |
 | − / + | Beside the playhead | Hold to nudge tempo (playing), jog (paused) |
 | Tap / drag | Overview | Seek |
+| Tap the title | Control row | Track details |
 | CUE | Rail | Set / return / preview (CDJ style) |
 | ◀◀ ▶▶ and size box | Rail | Beat jump; tap the box for 1–32 beats |
 | Q | Rail | Quantize on / off |
