@@ -10,7 +10,19 @@ void main() {
 
   test('formatKey', () {
     expect(formatKey(-1), '—');
-    expect(formatKey(0), contains('C'));
+    final before = keyNotation;
+    try {
+      keyNotation = KeyNotation.camelot; // the default
+      expect(formatKey(0), '8B');
+      expect(formatKey(21), '8A');
+      keyNotation = KeyNotation.musical;
+      expect(formatKey(0), 'C');
+      expect(formatKey(21), 'Am');
+      keyNotation = KeyNotation.both;
+      expect(formatKey(21), 'Am / 8A');
+    } finally {
+      keyNotation = before;
+    }
   });
 
   test('Subsonic jsonMaps unwraps a single object', () {
