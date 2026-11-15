@@ -3,6 +3,7 @@ import 'package:sidedeck/engine/music_utils.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 import 'package:sidedeck/ui/mixer_strip.dart';
+import 'package:sidedeck/ui/track_info.dart';
 import 'package:sidedeck/ui/waveform.dart';
 
 /// One deck in rbxport's 2-player arrangement: a transport rail on the left,
@@ -98,7 +99,7 @@ class DeckPanel extends StatelessWidget {
     }
     final rows = <Widget>[
       SizedBox(height: WaveformPainter.overviewH, child: wave(WavePart.overview)),
-      SizedBox(height: _rowH, child: _controlRow(d)),
+      SizedBox(height: _rowH, child: _controlRow(context, d)),
       Expanded(child: detail),
     ];
 
@@ -289,7 +290,7 @@ class DeckPanel extends StatelessWidget {
     );
   }
 
-  Widget _controlRow(DeckState d) {
+  Widget _controlRow(BuildContext context, DeckState d) {
     if (!d.loaded) {
       return Container(
         color: SideDeckTheme.deckRow,
@@ -310,7 +311,15 @@ class DeckPanel extends StatelessWidget {
           // Title and readouts share what the buttons leave; readouts shrink
           // to fit rather than squeezing the title out.
           // GRID mode has more buttons: give the title less of the row.
-          Expanded(flex: gridEditing ? 1 : 2, child: _title(d)),
+          // Tap the title for the full track details.
+          Expanded(
+            flex: gridEditing ? 1 : 2,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showTrackInfo(context, controller, index),
+              child: _title(d),
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
