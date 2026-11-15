@@ -35,7 +35,7 @@ class DeckPanel extends StatelessWidget {
   final double zoom;
   final ValueChanged<double> onZoom;
 
-  static const _railW = 60.0;
+  static const _railW = 104.0;
   static const _rowH = 30.0;
 
   bool get _hang => index == 1;
@@ -144,49 +144,56 @@ class DeckPanel extends StatelessWidget {
         child: Row(children: [tag, const Spacer(), tool]),
       ),
       Expanded(
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _cueButton(d),
-              const SizedBox(height: 8),
-              _playButton(d),
-              const SizedBox(height: 8),
-              // rbxport's rail: beat-jump pair, then size box (+ our Q toggle).
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _railChip(
-                    icon: Icons.fast_rewind,
-                    enabled: d.loaded && d.bpm > 1,
-                    onTap: () => controller.jump(index, -1),
-                  ),
-                  const SizedBox(width: 4),
-                  _railChip(
-                    icon: Icons.fast_forward,
-                    enabled: d.loaded && d.bpm > 1,
-                    onTap: () => controller.jump(index, 1),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _railChip(
-                    label: 'Q',
-                    lit: d.quantize,
-                    onTap: () => controller.setQuantize(index, !d.quantize),
-                  ),
-                  const SizedBox(width: 4),
-                  _railChip(
-                    label: '${d.jumpBeats}',
-                    onTap: () => controller.cycleJumpSize(index),
-                  ),
-                ],
-              ),
-            ],
+        // Keep clear of the centre line, so deck B's CUE isn't right against
+        // deck A's buttons.
+        child: Padding(
+          padding: EdgeInsets.only(top: _hang ? 10 : 2, bottom: _hang ? 2 : 10),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            // Two columns: CUE over PLAY, and beside them rbxport's beat-jump
+            // pair, our Q toggle and the jump-size box.
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _cueButton(d),
+                    const SizedBox(height: 12),
+                    _playButton(d),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _railChip(
+                      icon: Icons.fast_rewind,
+                      enabled: d.loaded && d.bpm > 1,
+                      onTap: () => controller.jump(index, -1),
+                    ),
+                    const SizedBox(height: 6),
+                    _railChip(
+                      icon: Icons.fast_forward,
+                      enabled: d.loaded && d.bpm > 1,
+                      onTap: () => controller.jump(index, 1),
+                    ),
+                    const SizedBox(height: 6),
+                    _railChip(
+                      label: 'Q',
+                      lit: d.quantize,
+                      onTap: () => controller.setQuantize(index, !d.quantize),
+                    ),
+                    const SizedBox(height: 6),
+                    _railChip(
+                      label: '${d.jumpBeats}',
+                      onTap: () => controller.cycleJumpSize(index),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -219,16 +226,16 @@ class DeckPanel extends StatelessWidget {
   }) {
     final fg = enabled ? Colors.white : SideDeckTheme.deckOutline;
     final face = Container(
-      width: 22,
-      height: 20,
+      width: 30,
+      height: 24,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: lit ? SideDeckTheme.deckLit : SideDeckTheme.deckButton,
         borderRadius: BorderRadius.circular(2),
       ),
       child: icon != null
-          ? Icon(icon, size: 13, color: fg)
-          : Text(label!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, height: 1, color: fg)),
+          ? Icon(icon, size: 15, color: fg)
+          : Text(label!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg)),
     );
     if (!enabled) return face;
     if (onStep != null) return HoldRepeatButton(onStep: onStep, child: face);

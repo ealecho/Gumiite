@@ -75,6 +75,35 @@ class DjController extends ChangeNotifier {
     _usbSub = UsbOutput.events().listen(_onUsbEvent);
     _loadKeyNotation();
     _loadAutoGain();
+    _loadShowFilter();
+  }
+
+  // On-screen mixer: the filter fader is optional (off by default) so the
+  // strip stays EQ + crossfader and gives its room back to the decks.
+  static const _showFilterPref = 'show_filter';
+
+  bool showFilter = false;
+
+  Future<void> _loadShowFilter() async {
+    final prefs = await SharedPreferences.getInstance();
+    final on = prefs.getBool(_showFilterPref) ?? false;
+    if (on == showFilter) return;
+    showFilter = on;
+    notifyListeners();
+  }
+
+  /// Hiding the filter also opens it, so no deck stays filtered with no
+  /// control on screen to undo it.
+  Future<void> setShowFilter(bool on) async {
+    showFilter = on;
+    if (!on) {
+      for (var i = 0; i < 2; i++) {
+        if (deck(i).filter != 0) setFilter(i, 0);
+      }
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showFilterPref, on);
   }
 
   static const _keyNotationPref = 'key_notation';

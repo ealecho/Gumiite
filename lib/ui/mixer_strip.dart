@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 
-/// Mixer under the waveforms: EQ/filter faders per deck and the crossfader,
+/// Mixer under the waveforms: EQ faders per deck (plus filter when turned on in
+/// Settings, DjController.showFilter) and the crossfader,
 /// in rbxport's neutral mixer style. Not shown in external mixer mode;
 /// library/settings live in the deck rails.
 class MixerStrip extends StatelessWidget {
@@ -112,7 +113,8 @@ class MixerStrip extends StatelessWidget {
           Expanded(child: _vSlider('LOW', d.eqLow, -12, 12, (v) => controller.setEq(deck, low: v))),
           Expanded(child: _vSlider('MID', d.eqMid, -12, 12, (v) => controller.setEq(deck, mid: v))),
           Expanded(child: _vSlider('HIGH', d.eqHigh, -12, 12, (v) => controller.setEq(deck, high: v))),
-          Expanded(child: _vSlider('FILT', d.filter, -1, 1, (v) => controller.setFilter(deck, v))),
+          if (controller.showFilter)
+            Expanded(child: _vSlider('FILT', d.filter, -1, 1, (v) => controller.setFilter(deck, v))),
         ],
       ),
     );

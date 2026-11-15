@@ -113,6 +113,31 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const Divider(height: 32),
           const Text(
+            'On-screen mixer',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Controls shown in the phone\'s own mixer, used when no external mixer '
+            'is connected.',
+            style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Filter'),
+            subtitle: const Text(
+              'A FILT fader per deck: down for low-pass, up for high-pass. '
+              'Turning it off resets both filters.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showFilter,
+            onChanged: (v) async {
+              await widget.dj.setShowFilter(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
             'Key display',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),

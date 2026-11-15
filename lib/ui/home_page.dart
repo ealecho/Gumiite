@@ -220,7 +220,12 @@ class _HomePageState extends State<HomePage> {
                   Expanded(flex: 6, child: _deck(1)),
                   // External mixer: the hardware mixes, so the decks get the whole screen.
                   if (!dj.externalMixer)
-                    if (_mixerHidden) _mixerHandle() else Expanded(flex: 5, child: _mixerBar()),
+                    // Without the filter the strip needs less room; the decks
+                    // (and their transport rails) take it.
+                    if (_mixerHidden)
+                      _mixerHandle()
+                    else
+                      Expanded(flex: dj.showFilter ? 5 : 4, child: _mixerBar()),
                 ],
               ),
             ),
