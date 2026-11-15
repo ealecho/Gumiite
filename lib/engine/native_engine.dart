@@ -33,6 +33,7 @@ typedef _GetBpmC = Float Function(Pointer<Void>, Int32);
 typedef _GetKeyC = Int32 Function(Pointer<Void>, Int32);
 typedef _NudgeC = Void Function(Pointer<Void>, Int32, Float);
 typedef _SetGridC = Void Function(Pointer<Void>, Int32, Float, Float);
+typedef _GetLevelC = Void Function(Pointer<Void>, Int32, Pointer<Float>, Pointer<Float>);
 typedef _SetLoopC = Void Function(Pointer<Void>, Int32, Int32, Float);
 typedef _SetLoopFromC = Void Function(Pointer<Void>, Int32, Float, Double);
 typedef _BeatJumpC = Void Function(Pointer<Void>, Int32, Int32);
@@ -148,6 +149,10 @@ class NativeEngine {
   late final _getGridConfidence = _lib
       .lookupFunction<_GetBpmC, double Function(Pointer<Void>, int)>(
         'dj_get_grid_confidence',
+      );
+  late final _getLevel = _lib
+      .lookupFunction<_GetLevelC, void Function(Pointer<Void>, int, Pointer<Float>, Pointer<Float>)>(
+        'dj_get_level',
       );
   late final _setLoopFrom = _lib
       .lookupFunction<_SetLoopFromC, void Function(Pointer<Void>, int, double, double)>(
@@ -303,6 +308,21 @@ class NativeEngine {
   /// Grid confidence from an analysis run at load (0..1); negative = unknown,
   /// including when the load used cached analysis.
   double gridConfidence(int deck) => _getGridConfidence(_handle, deck);
+
+  /// The loaded track's loudness (loud parts) and peak in dBFS; -100 = unknown.
+  ({double loudnessDb, double peakDb}) level(int deck) {
+    final loud = malloc<Float>();
+    final peak = malloc<Float>();
+    try {
+      loud.value = -100;
+      peak.value = -100;
+      _getLevel(_handle, deck, loud, peak);
+      return (loudnessDb: loud.value, peakDb: peak.value);
+    } finally {
+      malloc.free(loud);
+      malloc.free(peak);
+    }
+  }
   void nudgeGrid(int deck, double seconds) => _nudgeGrid(_handle, deck, seconds);
   /// Replace the grid: BPM and first-downbeat offset in seconds.
   void setGrid(int deck, double bpm, double beatOffset) => _setGrid(_handle, deck, bpm, beatOffset);

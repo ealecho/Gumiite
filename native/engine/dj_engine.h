@@ -56,6 +56,8 @@ DJ_FFI_EXPORT int dj_get_key(DjEngine engine, int deck);
 DJ_FFI_EXPORT float dj_get_beat_offset(DjEngine engine, int deck);
 /** Grid confidence from analysis run at load (0..1, -1 unknown / loaded from cache). */
 DJ_FFI_EXPORT float dj_get_grid_confidence(DjEngine engine, int deck);
+/** Loaded track's loudness (95th pct of 50 ms RMS) and peak, dBFS; -100 if unknown. */
+DJ_FFI_EXPORT void dj_get_level(DjEngine engine, int deck, float* loudness_db, float* peak_db);
 DJ_FFI_EXPORT void dj_nudge_grid(DjEngine engine, int deck, float seconds);
 /** Replace the deck's grid: BPM (ignored if <= 1) and first-downbeat offset (s). */
 DJ_FFI_EXPORT void dj_set_grid(DjEngine engine, int deck, float bpm, float beat_offset);

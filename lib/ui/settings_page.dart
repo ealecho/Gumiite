@@ -136,6 +136,23 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
           const Divider(height: 32),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto gain'),
+            subtitle: Text(
+              'Levels every track to the same loudness '
+              '(${DjController.autoGainTargetDb.toStringAsFixed(0)} dBFS for the loud parts, '
+              'never pushing the peak to clipping), so a mix doesn\'t jump between '
+              'quiet and hot masters. The applied gain shows on each deck.',
+              style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.autoGain,
+            onChanged: (v) async {
+              await widget.dj.setAutoGain(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
           const Text(
             'Subsonic server',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),

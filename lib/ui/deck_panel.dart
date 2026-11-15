@@ -376,6 +376,14 @@ class DeckPanel extends StatelessWidget {
         _mono(pctLabel, d.synced ? SideDeckTheme.deckLit : SideDeckTheme.deckDim),
         sep(),
         _mono(formatKey(d.key), SideDeckTheme.deckText),
+        // Auto gain at work: the level change applied to this track.
+        if (controller.autoGain && d.autoGainDb.abs() >= 0.1) ...[
+          sep(),
+          _mono(
+            '${d.autoGainDb > 0 ? '+' : '−'}${d.autoGainDb.abs().toStringAsFixed(1)} dB',
+            SideDeckTheme.deckDim,
+          ),
+        ],
       ],
     );
   }

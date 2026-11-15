@@ -124,6 +124,7 @@ struct Deck {
   std::vector<float> waveMax;
   std::vector<uint8_t> bandDetail;    // wave_bands::kDetailPerSec columns/s, low/mid/high
   std::vector<uint8_t> bandOverview;  // wave_bands::kOverviewColumns columns, low/mid/high
+  TrackLevel level;                   // loudness and peak, for auto gain
 
   LR4 eqLoL, eqLoR;         // LPF @ 246 Hz
   LR4 eqMidHpL, eqMidHpR;   // HPF @ 246 Hz
@@ -1029,6 +1030,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
 
   std::vector<float> wmin, wmax;
   std::vector<uint8_t> bandDetail, bandOverview;
+  TrackLevel level;
   {
     StreamingDecoder scan;
     if (!scan.open(path)) {
@@ -1038,7 +1040,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
       }
       return 0;
     }
-    scanWaveform(scan, kWaveformBins, wmin, wmax, bandDetail, bandOverview);
+    scanWaveform(scan, kWaveformBins, wmin, wmax, bandDetail, bandOverview, &level);
   }
 
   d.cache.waitChunk(0, 2500);
@@ -1060,6 +1062,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   d.waveMax = std::move(wmax);
   d.bandDetail = std::move(bandDetail);
   d.bandOverview = std::move(bandOverview);
+  d.level = level;
   d.flushStretcher();
   d.resetFilters();
   d.ensureStretcher();
@@ -1131,6 +1134,7 @@ void dj_unload(DjEngine engine, int deck) {
     d.waveMax.clear();
     d.bandDetail.clear();
     d.bandOverview.clear();
+    d.level = TrackLevel{};
     d.totalFrames = 0;
     d.path.clear();
   }
@@ -1325,6 +1329,20 @@ float dj_get_grid_confidence(DjEngine engine, int deck) {
   Deck& d = asEngine(engine)->decks[deck];
   std::lock_guard<std::mutex> lock(d.mutex);
   return d.gridConfidence;
+}
+
+void dj_get_level(DjEngine engine, int deck, float* loudness_db, float* peak_db) {
+  if (deck < 0 || deck > 1) {
+    return;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  if (loudness_db) {
+    *loudness_db = d.level.loudnessDb;
+  }
+  if (peak_db) {
+    *peak_db = d.level.peakDb;
+  }
 }
 
 void dj_nudge_grid(DjEngine engine, int deck, float seconds) {

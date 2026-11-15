@@ -5,6 +5,7 @@
 // On Android, AAC/ALAC-in-M4A uses MediaCodec (see mediacodec_aac.hpp).
 
 #include <algorithm>
+#include <cmath>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -463,9 +464,19 @@ struct StreamingDecoder {
 #endif
 };
 
+/// A track's level for auto gain: the loudness of its loud parts and its peak.
+struct TrackLevel {
+  /// 95th percentile of 50 ms RMS blocks (mono mix), in dBFS, ignoring
+  /// near-silence; in the spirit of ReplayGain's statistical loudness, as Mixxx
+  /// uses for its auto gain. -100 when unknown.
+  float loudnessDb = -100.0f;
+  /// Highest sample magnitude, dBFS: a boost must not push it past 0.
+  float peakDb = -100.0f;
+};
+
 inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& waveMin,
                          std::vector<float>& waveMax, std::vector<uint8_t>& bandDetail,
-                         std::vector<uint8_t>& bandOverview) {
+                         std::vector<uint8_t>& bandOverview, TrackLevel* level = nullptr) {
   waveMin.assign((size_t)std::max(1, bins), 0.0f);
   waveMax.assign((size_t)std::max(1, bins), 0.0f);
   bandDetail.clear();
@@ -474,6 +485,11 @@ inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& wa
     return;
   }
   wave_bands::Scanner bands(dec.sampleRate, dec.totalFrames);
+  const uint64_t levelBlock = std::max<uint64_t>(1, (uint64_t)dec.sampleRate / 20); // 50 ms
+  std::vector<float> blockRms;
+  double blockAcc = 0.0;
+  uint64_t blockN = 0;
+  float peak = 0.0f;
   dec.seek(0);
   constexpr uint64_t kBuf = 4096;
   std::vector<float> buf((size_t)kBuf * 2);
@@ -492,8 +508,32 @@ inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& wa
       waveMin[(size_t)b] = std::min(waveMin[(size_t)b], s);
       waveMax[(size_t)b] = std::max(waveMax[(size_t)b], s);
       bands.push(l, r);
+      peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+      blockAcc += (double)s * (double)s;
+      if (++blockN == levelBlock) {
+        blockRms.push_back((float)std::sqrt(blockAcc / (double)blockN));
+        blockAcc = 0.0;
+        blockN = 0;
+      }
     }
     pos += got;
   }
   bands.finish(bandDetail, bandOverview);
+
+  if (level) {
+    if (peak > 0.0f) {
+      level->peakDb = 20.0f * std::log10(peak);
+    }
+    // Leave out silence and fade tails (below -60 dBFS) so long intros or
+    // trailing silence don't pull the measure down.
+    std::vector<float> loud;
+    for (float v : blockRms) {
+      if (v > 0.001f) loud.push_back(v);
+    }
+    if (loud.size() >= 20) {
+      const size_t k = loud.size() * 95 / 100;
+      std::nth_element(loud.begin(), loud.begin() + (std::ptrdiff_t)k, loud.end());
+      level->loudnessDb = 20.0f * std::log10(loud[k]);
+    }
+  }
 }

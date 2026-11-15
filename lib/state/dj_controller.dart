@@ -46,6 +46,11 @@ class DeckState {
   bool get gridUnsure => gridConfidence >= 0 && gridConfidence < TrackAnalysis.unsureBelow;
   double beatOffset = 0;
   double gain = 1;
+  /// Auto gain applied on top of [gain], dB (0 when off or unknown).
+  double autoGainDb = 0;
+  /// The loaded track's level, from the engine's load scan (dBFS; -100 unknown).
+  double loudnessDb = -100;
+  double peakDb = -100;
   double fader = 1;
   double filter = 0;
   double eqLow = 0;
@@ -69,6 +74,7 @@ class DjController extends ChangeNotifier {
     }
     _usbSub = UsbOutput.events().listen(_onUsbEvent);
     _loadKeyNotation();
+    _loadAutoGain();
   }
 
   static const _keyNotationPref = 'key_notation';
@@ -90,6 +96,53 @@ class DjController extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyNotationPref, notation.name);
+  }
+
+  // Auto gain, after Mixxx's ReplayGain-based track gain: tracks are levelled
+  // to a common loudness so a mix doesn't jump between quiet and hot masters.
+  static const _autoGainPref = 'auto_gain';
+
+  /// Loud parts are brought to this level. Most loud house masters already sit
+  /// near it, so they change little; quiet ones are lifted.
+  static const autoGainTargetDb = -10.0;
+  static const _autoGainMinDb = -12.0;
+  static const _autoGainMaxDb = 6.0;
+
+  /// Headroom kept under full scale when boosting.
+  static const _autoGainPeakCeilingDb = -0.3;
+
+  bool autoGain = true;
+
+  Future<void> _loadAutoGain() async {
+    final prefs = await SharedPreferences.getInstance();
+    final on = prefs.getBool(_autoGainPref) ?? true;
+    if (on == autoGain) return;
+    await setAutoGain(on);
+  }
+
+  Future<void> setAutoGain(bool on) async {
+    autoGain = on;
+    for (var i = 0; i < 2; i++) {
+      _applyGain(i);
+    }
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoGainPref, on);
+  }
+
+  /// The deck's gain to the engine: its own [DeckState.gain] times auto gain.
+  void _applyGain(int deckIndex) {
+    final d = deck(deckIndex);
+    var db = 0.0;
+    if (autoGain && d.loaded && d.loudnessDb > -99) {
+      db = (autoGainTargetDb - d.loudnessDb).clamp(_autoGainMinDb, _autoGainMaxDb).toDouble();
+      // Never boost the peak past the ceiling (the engine hard-clips at full scale).
+      if (db > 0 && d.peakDb > -99) {
+        db = math.min(db, math.max(0.0, _autoGainPeakCeilingDb - d.peakDb));
+      }
+    }
+    d.autoGainDb = db;
+    _engine.setGain(deckIndex, d.gain * math.pow(10, db / 20));
   }
 
   late final NativeEngine _engine;
@@ -264,7 +317,10 @@ class DjController extends ChangeNotifier {
     d.bandsPerSec = _engine.waveBandsPerSec;
     _engine.setRate(deckIndex, 1);
     _nudgeBend[deckIndex] = 0;
-    _engine.setGain(deckIndex, d.gain);
+    final level = _engine.level(deckIndex);
+    d.loudnessDb = level.loudnessDb;
+    d.peakDb = level.peakDb;
+    _applyGain(deckIndex);
     _engine.setFader(deckIndex, d.fader);
     _engine.setFilter(deckIndex, d.filter);
     _engine.setEq(deckIndex, d.eqLow, d.eqMid, d.eqHigh);
@@ -462,7 +518,7 @@ class DjController extends ChangeNotifier {
 
   void setGain(int deckIndex, double v) {
     deck(deckIndex).gain = v;
-    _engine.setGain(deckIndex, v);
+    _applyGain(deckIndex);
     notifyListeners();
   }
 
