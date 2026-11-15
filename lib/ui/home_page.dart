@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/state/library_controller.dart';
@@ -23,6 +24,7 @@ class _HomePageState extends State<HomePage> {
   String? _bootError;
   int? _gridEditDeck;
   double _waveZoom = WaveformView.defaultZoom;
+  bool _mixerHidden = false;
   bool _mixerDialogOpen = false;
   BuildContext? _mixerDialogContext;
 
@@ -37,6 +39,7 @@ class _HomePageState extends State<HomePage> {
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _loadMixerHidden();
     try {
       final dj = DjController();
       final library = LibraryController();
@@ -216,7 +219,8 @@ class _HomePageState extends State<HomePage> {
                   const SizedBox(height: 1, child: ColoredBox(color: Color(0xFF323232))),
                   Expanded(flex: 6, child: _deck(1)),
                   // External mixer: the hardware mixes, so the decks get the whole screen.
-                  if (!dj.externalMixer) Expanded(flex: 5, child: _mixerBar()),
+                  if (!dj.externalMixer)
+                    if (_mixerHidden) _mixerHandle() else Expanded(flex: 5, child: _mixerBar()),
                 ],
               ),
             ),
@@ -226,11 +230,57 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  static const _mixerHiddenPref = 'mixer_hidden';
+
+  /// Hiding only takes the controls off screen; EQ, filter and crossfader
+  /// keep their settings. Remembered across launches.
+  Future<void> _setMixerHidden(bool hidden) async {
+    setState(() => _mixerHidden = hidden);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_mixerHiddenPref, hidden);
+  }
+
+  Future<void> _loadMixerHidden() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hidden = prefs.getBool(_mixerHiddenPref) ?? false;
+    if (mounted && hidden != _mixerHidden) setState(() => _mixerHidden = hidden);
+  }
+
+  /// The slim strip left when the mixer is hidden: tap to bring it back.
+  Widget _mixerHandle() {
+    return Material(
+      color: SideDeckTheme.deckRow,
+      child: InkWell(
+        onTap: () => _setMixerHidden(false),
+        child: const SizedBox(
+          height: 22,
+          width: double.infinity,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.keyboard_arrow_up, size: 18, color: SideDeckTheme.deckDim),
+              SizedBox(width: 4),
+              Text(
+                'MIXER',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: SideDeckTheme.deckDim,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _mixerBar() {
     return Stack(
       fit: StackFit.expand,
       children: [
-        MixerStrip(controller: _djReady),
+        MixerStrip(controller: _djReady, onHide: () => _setMixerHidden(true)),
         if (_gridEditDeck != null)
           Positioned.fill(
             child: GestureDetector(

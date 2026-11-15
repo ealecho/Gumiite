@@ -9,9 +9,12 @@ import 'package:sidedeck/theme/sidedeck_theme.dart';
 /// in rbxport's neutral mixer style. Not shown in external mixer mode;
 /// library/settings live in the deck rails.
 class MixerStrip extends StatelessWidget {
-  const MixerStrip({super.key, required this.controller});
+  const MixerStrip({super.key, required this.controller, this.onHide});
 
   final DjController controller;
+
+  /// Collapses the strip so the decks get the screen (see HomePage).
+  final VoidCallback? onHide;
 
   static const _label = TextStyle(
     fontSize: 9,
@@ -45,7 +48,19 @@ class MixerStrip extends StatelessWidget {
   Widget _center() {
     return Column(
       children: [
-        const SizedBox(height: 8),
+        SizedBox(
+          height: 22,
+          child: onHide == null
+              ? null
+              : IconButton(
+                  tooltip: 'Hide mixer',
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(width: 40, height: 22),
+                  onPressed: onHide,
+                  icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: SideDeckTheme.deckDim),
+                ),
+        ),
         const Text('CROSSFADER', style: _label),
         Expanded(
           child: Row(
