@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:sidedeck/engine/analysis_cache.dart';
+import 'package:sidedeck/engine/history_store.dart';
 import 'package:sidedeck/engine/music_utils.dart';
 import 'package:sidedeck/engine/track_analyzer.dart';
 import 'package:sidedeck/rekordbox/rekordbox_import.dart';
@@ -147,7 +148,8 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
 
   void _onSearchChanged(String v) {
     if (_tab == 0) widget.library.setQuery(v);
-    if (_tab == 2) setState(() {}); // the USB list filters on the box directly
+    // The USB and History lists filter on the box directly.
+    if (_tab == 2 || _tab == 3) setState(() {});
     if (_tab == 1 && v.trim().isEmpty && _searching) {
       _loadPlaylists();
     }
@@ -398,6 +400,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           bpm: t.bpm > 0 ? t.bpm : null,
           key: t.key >= 0 ? t.key : null,
           gridUnsure: t.gridConfidence >= 0 && t.gridConfidence < TrackAnalysis.unsureBelow,
+          played: widget.dj.playedPaths.contains(t.path),
           durationSec: t.durationSec.toDouble(),
           actions: [
             _deckBtn('A', busy ? null : () => _loadStickTrack(t, 0), loadingThis && widget.dj.loadingDeck == 0),
@@ -448,6 +451,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                   _tabBtn('Local', 0),
                   _tabBtn('Remote', 1),
                   _tabBtn('USB', 2),
+                  _tabBtn('History', 3),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SizedBox(
@@ -487,6 +491,14 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                       ),
                     ),
                   ),
+                  if (_tab == 3)
+                    IconButton(
+                      tooltip: 'Clear history',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: widget.dj.history.isEmpty ? null : _confirmClearHistory,
+                      icon: const Icon(Icons.delete_sweep_outlined, size: 22),
+                    )
+                  else
                   PopupMenuButton<TrackSort>(
                     tooltip: 'Sort',
                     padding: EdgeInsets.zero,
@@ -595,7 +607,8 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
               child: switch (_tab) {
                 0 => _localList(tracks),
                 1 => _remoteList(),
-                _ => _stickList(),
+                2 => _stickList(),
+                _ => _historyList(),
               },
             ),
           ],
@@ -805,11 +818,17 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     required double durationSec,
     required List<Widget> actions,
     bool gridUnsure = false,
+    bool played = false,
+    Widget? lead,
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 4, 8, 4),
       child: Row(
         children: [
+          // A lead (the history's number and time) takes the analyze slot.
+          if (lead != null)
+            lead
+          else
           SizedBox(
             width: 32,
             height: 32,
@@ -833,7 +852,26 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                // Played this session: ticked and dimmed, as in Mixxx.
+                Row(
+                  children: [
+                    if (played) ...[
+                      const Tooltip(
+                        message: 'Played this session',
+                        child: Icon(Icons.check, size: 14, color: SideDeckTheme.muted),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: played ? const TextStyle(color: SideDeckTheme.muted) : null,
+                      ),
+                    ),
+                  ],
+                ),
                 ?_trackArtist(artist, status: status),
               ],
             ),
@@ -882,6 +920,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           bpm: t.bpm,
           key: t.key,
           gridUnsure: t.gridUnsure,
+          played: widget.dj.playedPaths.contains(t.path),
           durationSec: t.durationMs / 1000.0,
           actions: [
             _deckBtn('A', busy ? null : () => _loadLocal(t, 0), loadingThis && widget.dj.loadingDeck == 0),
@@ -1057,5 +1096,149 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         );
       },
     );
+  }
+
+  Future<void> _confirmClearHistory() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear play history?'),
+        content: const Text('Every logged session is removed, and the played marks in the library go too.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok == true) await widget.dj.clearHistory();
+  }
+
+  /// Back onto a deck from the history: a stick track opens through the
+  /// stick, anything else by its path if the file is still there.
+  Future<void> _loadHistoryTrack(PlayedTrack t, int deck) async {
+    final stick = await RekordboxStore.instance.track(t.path);
+    if (!mounted) return;
+    if (stick != null) {
+      await _loadStickTrack(stick, deck);
+      return;
+    }
+    if (!await File(t.path).exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${t.title} is no longer on the phone.')),
+      );
+      return;
+    }
+    final ok = await widget.dj.loadFile(deck, t.path, title: t.title, artist: t.artist);
+    if (ok && mounted) Navigator.pop(context);
+  }
+
+  static String _clock(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  static String _sessionDay(DateTime start, DateTime now) {
+    final day = DateTime(start.year, start.month, start.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final ago = today.difference(day).inDays;
+    if (ago == 0) return 'Today';
+    if (ago == 1) return 'Yesterday';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[start.weekday - 1]} ${start.day} ${months[start.month - 1]}'
+        '${start.year == now.year ? '' : ' ${start.year}'}';
+  }
+
+  Widget _historyList() {
+    final now = DateTime.now();
+    final sessions = HistoryStore.sessions(widget.dj.history);
+    if (sessions.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Tracks you play show up here, grouped into sessions.\n'
+            'A track counts once it has been heard for 30 seconds.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: SideDeckTheme.muted),
+          ),
+        ),
+      );
+    }
+    final q = _search.text.trim().toLowerCase();
+    final current = HistoryStore.currentSession(widget.dj.history, now);
+    final busy = widget.dj.loadingDeck != null || _stickBusy;
+    final items = <Widget>[];
+    for (final s in sessions) {
+      var plays = s.tracks;
+      if (q.isNotEmpty) {
+        plays = plays
+            .where((t) => t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q))
+            .toList();
+        if (plays.isEmpty) continue;
+      }
+      final live = current != null && s.start == current.start;
+      items.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+          child: Text(
+            '${_sessionDay(s.start, now).toUpperCase()} · ${_clock(s.start)}–${_clock(s.end)}'
+            ' · ${s.tracks.length} track${s.tracks.length == 1 ? '' : 's'}'
+            '${live ? ' · NOW' : ''}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: live ? SideDeckTheme.deckLit : SideDeckTheme.muted,
+            ),
+          ),
+        ),
+      );
+      // Newest play first within a session, numbered in play order.
+      for (var i = plays.length - 1; i >= 0; i--) {
+        final t = plays[i];
+        final n = s.tracks.indexOf(t) + 1;
+        final loadingThis = widget.dj.loadingPath == t.path;
+        items.add(
+          _songRow(
+            lead: SizedBox(
+              width: 58,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '$n',
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: SideDeckTheme.text),
+                    ),
+                    TextSpan(text: '  ${_clock(t.playedAt)}'),
+                  ],
+                ),
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 11, color: SideDeckTheme.muted),
+              ),
+            ),
+            busyThis: false,
+            analyzeTooltip: '',
+            onAnalyze: null,
+            title: t.title,
+            artist: t.artist,
+            status: 'deck ${t.deck == 0 ? 'A' : 'B'}',
+            bpm: t.bpm > 0 ? t.bpm : null,
+            key: t.key >= 0 ? t.key : null,
+            durationSec: 0,
+            actions: [
+              _deckBtn('A', busy ? null : () => _loadHistoryTrack(t, 0), loadingThis && widget.dj.loadingDeck == 0),
+              const SizedBox(width: 8),
+              _deckBtn('B', busy ? null : () => _loadHistoryTrack(t, 1), loadingThis && widget.dj.loadingDeck == 1),
+            ],
+          ),
+        );
+      }
+    }
+    if (items.isEmpty) {
+      return const Center(
+        child: Text('No played tracks match.', style: TextStyle(color: SideDeckTheme.muted)),
+      );
+    }
+    return ListView(children: items);
   }
 }

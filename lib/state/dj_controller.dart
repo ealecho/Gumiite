@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/analysis_cache.dart';
 import 'package:sidedeck/engine/cue_store.dart';
+import 'package:sidedeck/engine/history_store.dart';
 import 'package:sidedeck/engine/music_utils.dart' as music;
 import 'package:sidedeck/engine/music_utils.dart' show KeyNotation;
 import 'package:sidedeck/engine/native_engine.dart';
@@ -63,6 +64,11 @@ class DeckState {
   Uint8List bandDetail = Uint8List(0);
   Uint8List bandOverview = Uint8List(0);
   int bandsPerSec = 150;
+
+  /// Seconds this load has been heard (see DjController.playedAfterSec).
+  double audibleSec = 0;
+  /// Logged to the play history already for this load.
+  bool logged = false;
 }
 
 class DjController extends ChangeNotifier {
@@ -76,6 +82,75 @@ class DjController extends ChangeNotifier {
     _loadKeyNotation();
     _loadAutoGain();
     _loadShowFilter();
+    _loadHistory();
+  }
+
+  // Play history, after Mixxx's "played" marks and session history: a track
+  // counts once it has been heard for [playedAfterSec] on one load.
+  static const playedAfterSec = 30.0;
+
+  /// Logged plays, oldest first.
+  List<PlayedTrack> history = const [];
+
+  /// Paths played in the session still going, for the library's marks.
+  Set<String> playedPaths = const {};
+
+  final Stopwatch _clock = Stopwatch()..start();
+  Duration _lastTick = Duration.zero;
+
+  Future<void> _loadHistory() async {
+    try {
+      history = await HistoryStore.instance.recent();
+    } catch (_) {
+      return;
+    }
+    _updatePlayed();
+    notifyListeners();
+  }
+
+  void _updatePlayed() {
+    final session = HistoryStore.currentSession(history, DateTime.now());
+    playedPaths = {for (final t in session?.tracks ?? const <PlayedTrack>[]) t.path};
+  }
+
+  Future<void> clearHistory() async {
+    history = const [];
+    playedPaths = const {};
+    notifyListeners();
+    try {
+      await HistoryStore.instance.clear();
+    } catch (_) {}
+  }
+
+  /// Heard, not just running: a cue preview doesn't count, and on the phone's
+  /// own mixer neither does a closed channel fader or crossfader. An external
+  /// mixer's faders can't be seen, so there playing is enough.
+  bool _audible(int i) {
+    final d = deck(i);
+    if (d.cuePreview) return false;
+    if (externalMixer) return true;
+    if (d.fader < 0.05) return false;
+    return i == 0 ? xfader < 0.97 : xfader > 0.03;
+  }
+
+  void _countPlay(int i, double dt) {
+    final d = deck(i);
+    if (d.logged || d.path == null || !_audible(i)) return;
+    d.audibleSec += dt;
+    if (d.audibleSec < playedAfterSec) return;
+    d.logged = true;
+    final entry = PlayedTrack(
+      path: d.path!,
+      title: d.title,
+      artist: d.artist,
+      bpm: d.bpm,
+      key: d.key,
+      deck: i,
+      playedAt: DateTime.now(),
+    );
+    history = [...history, entry];
+    _updatePlayed();
+    HistoryStore.instance.add(entry).catchError((_) {});
   }
 
   // On-screen mixer: the filter fader is optional (off by default) so the
@@ -251,12 +326,17 @@ class DjController extends ChangeNotifier {
   }
 
   void _tick() {
+    final now = _clock.elapsed;
+    // Capped so a stalled timer can't count a long gap as listening.
+    final dt = math.min((now - _lastTick).inMicroseconds / 1e6, 0.5);
+    _lastTick = now;
     var dirty = false;
     for (var i = 0; i < 2; i++) {
       final d = deck(i);
       if (!d.loaded || !d.playing) continue;
       d.position = _engine.position(i);
       d.playing = _engine.isPlaying(i);
+      _countPlay(i, dt);
       if (d.loopEnabled) {
         _readLoop(i);
       }
@@ -315,6 +395,8 @@ class DjController extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    // A reload (e.g. after re-analysis) is the same play, not a new one.
+    final reload = d.loaded && d.path == path;
     d.path = path;
     d.openPath = openPath;
     _gridUndo[deckIndex].clear(); // undo belongs to the track it was made on
@@ -323,6 +405,10 @@ class DjController extends ChangeNotifier {
     d.artist = artist ?? '';
     d.loaded = true;
     d.playing = false;
+    if (!reload) {
+      d.audibleSec = 0;
+      d.logged = false;
+    }
     d.position = 0;
     d.cuePoint = 0;
     d.cuePreview = false;
