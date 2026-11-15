@@ -11,9 +11,12 @@ import 'package:sidedeck/engine/music_utils.dart' show KeyNotation;
 import 'package:sidedeck/engine/native_engine.dart';
 import 'package:sidedeck/engine/track_analyzer.dart';
 import 'package:sidedeck/engine/usb_output.dart';
+import 'package:sidedeck/rekordbox/rekordbox_store.dart';
 
 class DeckState {
   String? path;
+  /// The file actually opened when it differs from [path] (a cached copy).
+  String? openPath;
   String title = 'Empty';
   String artist = '';
   bool loaded = false;
@@ -180,11 +183,15 @@ class DjController extends ChangeNotifier {
     if (dirty) notifyListeners();
   }
 
+  /// Loads [path] onto a deck. [path] is the track's identity (cues, analysis,
+  /// library); [openPath], when given, is the file the engine actually opens,
+  /// e.g. a cached copy of a USB stick track Android won't open by path.
   Future<bool> loadFile(
     int deckIndex,
     String path, {
     String? title,
     String? artist,
+    String? openPath,
   }) async {
     loadingDeck = deckIndex;
     loadingTitle = title ?? path.split(RegExp(r'[\\/]')).last;
@@ -192,19 +199,23 @@ class DjController extends ChangeNotifier {
     notifyListeners();
     await Future<void>.delayed(const Duration(milliseconds: 16));
 
-    TrackAnalysis? cached;
-    try {
-      final stat = await File(path).stat();
-      cached = await _analysisCache.get(
-        path,
-        stat.size,
-        stat.modified.millisecondsSinceEpoch,
-      );
-    } catch (_) {}
+    // A grid prepared in rekordbox is the user's own: it wins over ours.
+    TrackAnalysis? cached = (await RekordboxStore.instance.track(path))?.analysis;
+    if (cached != null && cached.bpm <= 0) cached = null;
+    if (cached == null) {
+      try {
+        final stat = await File(openPath ?? path).stat();
+        cached = await _analysisCache.get(
+          path,
+          stat.size,
+          stat.modified.millisecondsSinceEpoch,
+        );
+      } catch (_) {}
+    }
 
     final ok = _engine.load(
       deckIndex,
-      path,
+      openPath ?? path,
       bpm: cached?.bpm,
       key: cached?.key,
       beatOffset: cached?.beatOffset,
@@ -223,6 +234,7 @@ class DjController extends ChangeNotifier {
       return false;
     }
     d.path = path;
+    d.openPath = openPath;
     d.title = title ?? path.split(RegExp(r'[\\/]')).last;
     d.artist = artist ?? '';
     d.loaded = true;
@@ -257,7 +269,7 @@ class DjController extends ChangeNotifier {
 
     if (cached == null) {
       try {
-        final file = File(path);
+        final file = File(openPath ?? path);
         final stat = await file.stat();
         await _analysisCache.put(
           path: path,
@@ -331,6 +343,7 @@ class DjController extends ChangeNotifier {
         path,
         title: title ?? d.title,
         artist: artist ?? d.artist,
+        openPath: d.openPath,
       );
     }
   }
@@ -707,6 +720,9 @@ class DjController extends ChangeNotifier {
     d.gridConfidence = -1; // hand-fixed: no longer "check grid"
     notifyListeners();
     _persistAnalysis(d, userEdited: true);
+    // An imported track loads its grid from the stick import, so keep the fix there too.
+    final path = d.path;
+    if (path != null) RekordboxStore.instance.updateGrid(path, d.beatOffset);
   }
 
   /// Shift the painted grid. Negative = earlier (yellow moves left).

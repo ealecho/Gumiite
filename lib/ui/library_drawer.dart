@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:sidedeck/engine/analysis_cache.dart';
 import 'package:sidedeck/engine/music_utils.dart';
 import 'package:sidedeck/engine/track_analyzer.dart';
+import 'package:sidedeck/rekordbox/rekordbox_import.dart';
+import 'package:sidedeck/rekordbox/rekordbox_store.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/state/library_controller.dart';
 import 'package:sidedeck/subsonic/subsonic_client.dart';
@@ -43,6 +45,13 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
   final _search = TextEditingController();
   int _tab = 0;
 
+  // USB tab: the last imported rekordbox stick.
+  List<StickTrack> _stick = const [];
+  List<StickPlaylist> _stickLists = const [];
+  int? _stickPlaylist; // null: all tracks
+  String? _stickStatus;
+  bool _stickBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +59,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     // an empty box would sit over a filtered list that clearing can't reset.
     _search.text = widget.library.query;
     _loadClient();
+    _loadStick();
     widget.library.addListener(_onLib);
     widget.dj.addListener(_onLib);
   }
@@ -137,6 +147,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
 
   void _onSearchChanged(String v) {
     if (_tab == 0) widget.library.setQuery(v);
+    if (_tab == 2) setState(() {}); // the USB list filters on the box directly
     if (_tab == 1 && v.trim().isEmpty && _searching) {
       _loadPlaylists();
     }
@@ -275,6 +286,129 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     }
   }
 
+  Future<void> _loadStick() async {
+    final tracks = await RekordboxStore.instance.tracks();
+    final lists = await RekordboxStore.instance.playlists();
+    if (!mounted) return;
+    setState(() {
+      _stick = tracks;
+      _stickLists = lists;
+      if (_stickPlaylist != null && !lists.any((l) => l.id == _stickPlaylist)) _stickPlaylist = null;
+    });
+  }
+
+  Future<void> _importStick() async {
+    setState(() {
+      _stickBusy = true;
+      _stickStatus = 'Reading USB…';
+    });
+    try {
+      final r = await RekordboxImporter.pickAndImport();
+      if (r != null) {
+        await _loadStick();
+        _stickStatus = 'Imported ${r.tracks} tracks, ${r.playlists} playlists · '
+            '${r.withGrid} grids${r.variableGrids > 0 ? ' (${r.variableGrids} with tempo changes: check grid)' : ''} · '
+            '${r.withCues} with cues';
+      } else {
+        _stickStatus = null;
+      }
+    } catch (e) {
+      _stickStatus = 'Import failed: $e';
+    } finally {
+      if (mounted) setState(() => _stickBusy = false);
+    }
+  }
+
+  Future<void> _loadStickTrack(StickTrack t, int deck) async {
+    setState(() => _stickStatus = 'Opening from USB…');
+    final open = await RekordboxImporter.playablePath(t);
+    if (!mounted) return;
+    if (open == null) {
+      setState(() => _stickStatus = "Can't open ${t.title} from the stick. Is it plugged in?");
+      return;
+    }
+    setState(() => _stickStatus = null);
+    final ok = await widget.dj.loadFile(
+      deck,
+      t.path,
+      title: t.title,
+      artist: t.artist,
+      openPath: open == t.path ? null : open,
+    );
+    if (ok && mounted) Navigator.pop(context);
+  }
+
+  /// Playlists for the picker, folders shown as path prefixes.
+  List<(int, String)> _stickPlaylistNames() {
+    final byId = {for (final l in _stickLists) l.id: l};
+    String name(StickPlaylist l) {
+      final parent = byId[l.parentId];
+      return parent == null ? l.name : '${name(parent)} / ${l.name}';
+    }
+
+    final lists = _stickLists.where((l) => !l.isFolder).toList()
+      ..sort((a, b) => name(a).toLowerCase().compareTo(name(b).toLowerCase()));
+    return [for (final l in lists) (l.id, name(l))];
+  }
+
+  Widget _stickList() {
+    if (_stick.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Plug in a USB stick exported from rekordbox (through a USB-C hub),\n'
+            'tap the USB icon and pick the stick. Its tracks, playlists, beat grids\n'
+            'and cues come in; the grids and cues you set in rekordbox are kept.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: SideDeckTheme.muted),
+          ),
+        ),
+      );
+    }
+    var tracks = _stick;
+    final playlist = _stickPlaylist;
+    if (playlist != null) {
+      final byPath = {for (final t in _stick) t.path: t};
+      final order = _stickLists.firstWhere((l) => l.id == playlist).trackPaths;
+      tracks = [for (final path in order) ?byPath[path]];
+    }
+    final q = _search.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      tracks = tracks
+          .where((t) => t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q))
+          .toList();
+    }
+    // A playlist keeps its own order; "all tracks" follows the sort menu.
+    if (playlist == null) {
+      tracks = _sorted(tracks, (t) => (title: t.title, artist: t.artist, bpm: t.bpm, key: t.key));
+    }
+    final busy = widget.dj.loadingDeck != null || _stickBusy;
+    return ListView.builder(
+      itemCount: tracks.length,
+      itemBuilder: (context, i) {
+        final t = tracks[i];
+        final loadingThis = widget.dj.loadingPath == t.path;
+        return _songRow(
+          busyThis: false,
+          analyzeTooltip: 'Grid and cues from rekordbox',
+          onAnalyze: null,
+          title: t.title,
+          artist: t.artist,
+          bpm: t.bpm > 0 ? t.bpm : null,
+          key: t.key >= 0 ? t.key : null,
+          gridUnsure: t.gridConfidence >= 0 && t.gridConfidence < TrackAnalysis.unsureBelow,
+          durationSec: t.durationSec.toDouble(),
+          actions: [
+            _deckBtn('A', busy ? null : () => _loadStickTrack(t, 0), loadingThis && widget.dj.loadingDeck == 0),
+            const SizedBox(width: 8),
+            _deckBtn('B', busy ? null : () => _loadStickTrack(t, 1), loadingThis && widget.dj.loadingDeck == 1),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _loadLocal(LibraryTrack t, int deck) async {
     final ok = await widget.dj.loadFile(
       deck,
@@ -313,6 +447,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                 children: [
                   _tabBtn('Local', 0),
                   _tabBtn('Remote', 1),
+                  _tabBtn('USB', 2),
                   const SizedBox(width: 8),
                   Expanded(
                     child: SizedBox(
@@ -321,7 +456,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                         controller: _search,
                         style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          hintText: _tab == 0 ? 'Filter…' : 'Search server, or browse playlists',
+                          hintText: _tab == 1 ? 'Search server, or browse playlists' : 'Filter…',
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                           prefixIcon: const Icon(Icons.search, size: 18),
@@ -363,6 +498,30 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                       _sortItem(TrackSort.key, 'Key'),
                     ],
                   ),
+                  if (_tab == 2) ...[
+                    PopupMenuButton<int>(
+                      tooltip: 'Playlist',
+                      enabled: _stickLists.isNotEmpty,
+                      padding: EdgeInsets.zero,
+                      icon: Icon(
+                        Icons.queue_music,
+                        size: 22,
+                        color: _stickPlaylist != null ? SideDeckTheme.deckLit : null,
+                      ),
+                      onSelected: (id) => setState(() => _stickPlaylist = id < 0 ? null : id),
+                      itemBuilder: (context) => [
+                        CheckedPopupMenuItem(value: -1, checked: _stickPlaylist == null, child: const Text('All tracks')),
+                        for (final (id, name) in _stickPlaylistNames())
+                          CheckedPopupMenuItem(value: id, checked: _stickPlaylist == id, child: Text(name)),
+                      ],
+                    ),
+                    IconButton(
+                      tooltip: 'Import a rekordbox USB',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _stickBusy ? null : _importStick,
+                      icon: const Icon(Icons.usb, size: 22),
+                    ),
+                  ],
                   if (_tab == 0) ...[
                     if (lib.analyzing)
                       IconButton(
@@ -427,8 +586,17 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                 child: _statusLine(lib),
               ),
             if (_tab == 1 && _openPlaylist != null) _playlistHeader(),
+            if (_tab == 2 && _stickStatus != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                child: Text(_stickStatus!, style: const TextStyle(fontSize: 12, color: SideDeckTheme.muted)),
+              ),
             Expanded(
-              child: _tab == 0 ? _localList(tracks) : _remoteList(),
+              child: switch (_tab) {
+                0 => _localList(tracks),
+                1 => _remoteList(),
+                _ => _stickList(),
+              },
             ),
           ],
         ),

@@ -1,6 +1,7 @@
 package es.manifold.sidedeck
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
@@ -14,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var usbHotplug: UsbHotplug? = null
+    private var stickAccess: StickAccess? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,6 +61,14 @@ class MainActivity : FlutterActivity() {
         val hotplug = UsbHotplug(this)
         usbHotplug = hotplug
         EventChannel(messenger, "sidedeck/usb").setStreamHandler(hotplug)
+        val stick = StickAccess(this)
+        stickAccess = stick
+        MethodChannel(messenger, "sidedeck/stick").setMethodCallHandler(stick)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (stickAccess?.onActivityResult(requestCode, resultCode, data) == true) return
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     override fun onDestroy() {
