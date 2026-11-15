@@ -33,6 +33,8 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![The restyled internal mixer](screenshots/mixer.png)
 
+![The library: Camelot keys (compatible ones coloured), the "check grid" warning, and the filter box](screenshots/library.png)
+
 ## What this fork adds
 
 | Area | Change |
