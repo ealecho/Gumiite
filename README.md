@@ -37,7 +37,9 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![Track details, opened by tapping a deck's title](screenshots/details.png)
 
-![The library: Local, Remote and USB tabs, Camelot keys (compatible ones coloured), the "check grid" warning, and the filter box](screenshots/library.png)
+![The library: Local, Remote, USB and History tabs, Camelot keys (compatible ones coloured), the "check grid" warning, a track ticked as played this session, and the filter box](screenshots/library.png)
+
+![The History tab: this session's plays with number, time and deck, ready to reload](screenshots/history.png)
 
 ![The USB tab, for importing a rekordbox stick](screenshots/usb.png)
 
@@ -54,7 +56,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase |
 | Cues | Cue and hot cues saved per track and restored on load |
 | Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
-| Library | Key display setting (Camelot / musical / both); search filter fix; rekordbox USB import (untested on a real stick) |
+| Library | Key display setting (Camelot / musical / both); search filter fix; played marks and a History tab; rekordbox USB import (untested on a real stick) |
 
 Details of each are below.
 
@@ -239,6 +241,15 @@ cue colours and comments. It has only been tested on synthetic files so far.
 - **Search fix:** the filter could stay active after a search while the box
   looked empty, so other tracks could not be picked. The box now shows the
   active filter and has a clear button.
+- **Played marks:** after Mixxx, a track counts as played once it has been
+  heard for 30 s. Cue previews don't count, and on the phone's own mixer
+  neither does a closed channel fader or crossfader. In the Local and USB
+  lists, tracks played this session are ticked ✓ and dimmed so you don't
+  repeat one. A session is a run of plays less than 3 hours apart, so the
+  marks survive an app restart mid-set and are gone by the next night.
+- **History tab:** sessions newest first ("TODAY · 21:04–23:10 · 14 tracks ·
+  NOW"), each play with its number, time, deck, BPM and key, and A / B to load
+  it again. The filter box searches it; the bin icon clears the history.
 
 ## Controls quick reference
 
@@ -258,6 +269,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
 | USB tab | Library | Import a rekordbox stick |
+| History tab | Library | Tracks played, by session; reload onto A / B |
 
 ## Requirements
 
