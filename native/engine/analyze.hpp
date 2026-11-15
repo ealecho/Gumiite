@@ -12,6 +12,8 @@ struct AnalysisResult {
   float beatOffsetSec = 0.0f;
   int key = -1; // 0..11 major, 12..23 minor; -1 unknown
   std::vector<float> beats; // seconds
+  // Share of kicks that land on the grid (0..1); -1 unknown. Low = check grid.
+  float gridConfidence = -1.0f;
 };
 
 namespace analyze_detail {
@@ -105,13 +107,15 @@ inline void applyKickGrid(AnalysisResult& out, const float* interleaved, int fra
     phaseSec = 0.0;
   }
   // Tag BPM is kept as the period; only the phase is pulled onto the kicks.
-  if (auto fine = grid_fit::refine(interleaved, frames, channels, (double)sampleRate,
-                                   {phaseSec, periodSec}, true)) {
+  const grid_fit::Refined refined = grid_fit::refine(interleaved, frames, channels,
+                                                     (double)sampleRate, {phaseSec, periodSec}, true);
+  if (const auto& fine = refined.fit) {
     phaseSec = std::fmod(fine->phase, periodSec);
     if (phaseSec < 0.0) {
       phaseSec += periodSec;
     }
   }
+  out.gridConfidence = (float)grid_phase::gridConfidence(env, phaseSec, periodSec, duration);
   out.beatOffsetSec = (float)grid_phase::firstAudibleLine(
       interleaved, frames, channels, (double)sampleRate, phaseSec, periodSec);
   out.beats.clear();

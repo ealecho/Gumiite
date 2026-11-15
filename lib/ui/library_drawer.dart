@@ -9,6 +9,7 @@ import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/state/library_controller.dart';
 import 'package:sidedeck/subsonic/subsonic_client.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
+import 'package:sidedeck/ui/deck_panel.dart' show GridWarningBadge;
 
 /// Modal library overlay (opened from the Library button).
 class LibraryOverlay extends StatefulWidget {
@@ -238,6 +239,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           bpm: result.bpm,
           key: result.key,
           beatOffset: result.beatOffset,
+          gridConfidence: result.gridConfidence,
         );
       } catch (_) {}
       if (!mounted) return;
@@ -491,7 +493,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     return color;
   }
 
-  Widget _trackMeta(double? bpm, int? key, double durationSec) {
+  Widget _trackMeta(double? bpm, int? key, double durationSec, {bool gridUnsure = false}) {
     final hasBpm = bpm != null && bpm > 0;
     final hasKey = key != null && key >= 0;
     final keyColor = _compatibleKeyColor(key);
@@ -501,13 +503,22 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            hasBpm ? bpm.toStringAsFixed(1) : '—',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: hasBpm ? SideDeckTheme.text : SideDeckTheme.muted,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (gridUnsure) ...[
+                const GridWarningBadge(label: 'CHECK GRID'),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                hasBpm ? bpm.toStringAsFixed(1) : '—',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: hasBpm ? SideDeckTheme.text : SideDeckTheme.muted,
+                ),
+              ),
+            ],
           ),
           if (durationSec > 0 || hasKey)
             Text.rich(
@@ -625,6 +636,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     required int? key,
     required double durationSec,
     required List<Widget> actions,
+    bool gridUnsure = false,
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(2, 4, 8, 4),
@@ -658,7 +670,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
               ],
             ),
           ),
-          _trackMeta(bpm, key, durationSec),
+          _trackMeta(bpm, key, durationSec, gridUnsure: gridUnsure),
           const SizedBox(width: 6),
           ...actions,
         ],
@@ -701,6 +713,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           artist: t.artist,
           bpm: t.bpm,
           key: t.key,
+          gridUnsure: t.gridUnsure,
           durationSec: t.durationMs / 1000.0,
           actions: [
             _deckBtn('A', busy ? null : () => _loadLocal(t, 0), loadingThis && widget.dj.loadingDeck == 0),
@@ -866,6 +879,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           status: busyThis ? _remoteBusyLabel : null,
           bpm: meta?.bpm,
           key: meta?.key,
+          gridUnsure: meta?.gridUnsure ?? false,
           durationSec: t.duration.toDouble(),
           actions: [
             _deckBtn('A', busy ? null : () => _loadRemote(t, 0)),

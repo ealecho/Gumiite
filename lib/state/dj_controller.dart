@@ -34,6 +34,13 @@ class DeckState {
   bool cuePreview = false;
   /// Hot cue positions in seconds per slot (A, B, C, D); negative = empty.
   List<double> hotCues = List.filled(NativeEngine.hotCueCount, -1);
+  /// Snap cue, hot cue and loop-in to the beat grid (rbxport/Mixxx "Q").
+  bool quantize = true;
+  /// Beats moved by the rail's beat-jump buttons.
+  int jumpBeats = 4;
+  /// Share of kicks on the grid from analysis (0..1); negative = unknown.
+  double gridConfidence = -1;
+  bool get gridUnsure => gridConfidence >= 0 && gridConfidence < TrackAnalysis.unsureBelow;
   double beatOffset = 0;
   double gain = 1;
   double fader = 1;
@@ -228,6 +235,8 @@ class DjController extends ChangeNotifier {
     d.bpm = _engine.bpm(deckIndex);
     d.key = _engine.key(deckIndex);
     d.beatOffset = _engine.beatOffset(deckIndex);
+    // A cached load skips analysis, so the engine only knows it after a fresh one.
+    d.gridConfidence = cached?.gridConfidence ?? _engine.gridConfidence(deckIndex);
     d.rate = 1;
     d.synced = false;
     d.loopEnabled = false;
@@ -257,6 +266,7 @@ class DjController extends ChangeNotifier {
           bpm: d.bpm,
           key: d.key,
           beatOffset: d.beatOffset,
+          gridConfidence: d.gridConfidence,
         );
       } catch (_) {}
     }
@@ -359,6 +369,11 @@ class DjController extends ChangeNotifier {
       d.playing = true;
       d.cuePreview = true;
     } else {
+      if (d.quantize) {
+        // Park on the nearest beat first: the engine sets the cue at the playhead.
+        final beat = _nearestBeat(d, _engine.position(deckIndex));
+        _engine.seek(deckIndex, beat);
+      }
       _engine.setCue(deckIndex);
       d.cuePoint = _engine.position(deckIndex);
       d.position = d.cuePoint;
@@ -385,9 +400,22 @@ class DjController extends ChangeNotifier {
     final d = deck(deckIndex);
     if (!d.loaded) return;
     if (d.hotCues[slot] < 0) {
-      _engine.setHotcue(deckIndex, slot);
+      if (d.quantize) {
+        _engine.setHotcue(deckIndex, slot, _nearestBeat(d, _engine.position(deckIndex)));
+      } else {
+        _engine.setHotcue(deckIndex, slot);
+      }
       d.hotCues[slot] = _engine.hotcue(deckIndex, slot);
       _saveCues(deckIndex);
+    } else if (d.quantize && d.playing && d.bpm > 1) {
+      // Keep where we are within the beat, so the jump lands in time.
+      final pos = _engine.position(deckIndex);
+      final target = (d.hotCues[slot] + pos - _nearestBeat(d, pos))
+          .clamp(0.0, math.max(0.0, d.duration))
+          .toDouble();
+      _engine.seek(deckIndex, target);
+      d.position = target;
+      _readLoop(deckIndex);
     } else {
       _engine.jumpHotcue(deckIndex, slot);
       // A playing deck applies the jump on the audio thread; show it now.
@@ -535,10 +563,46 @@ class DjController extends ChangeNotifier {
   void setLoop(int deckIndex, bool enabled, [double? bars]) {
     final d = deck(deckIndex);
     if (bars != null) d.loopBars = bars.clamp(0.25, 8.0);
+    final startsNow = enabled && !d.loopEnabled;
     d.loopEnabled = enabled;
-    _engine.setLoop(deckIndex, enabled, d.loopBars);
+    if (startsNow && d.quantize && d.bpm > 1) {
+      // Quantized loop-in: start on the nearest beat, not the exact playhead.
+      _engine.setLoopFrom(deckIndex, d.loopBars, _nearestBeat(d, _engine.position(deckIndex)));
+    } else {
+      _engine.setLoop(deckIndex, enabled, d.loopBars);
+    }
     _readLoop(deckIndex);
     notifyListeners();
+  }
+
+  /// The beat grid line nearest [seconds]; [seconds] itself without a grid.
+  double _nearestBeat(DeckState d, double seconds) {
+    if (d.bpm <= 1) return seconds;
+    final period = 60.0 / d.bpm;
+    final k = ((seconds - d.beatOffset) / period).roundToDouble();
+    return (d.beatOffset + k * period).clamp(0.0, math.max(0.0, d.duration)).toDouble();
+  }
+
+  void setQuantize(int deckIndex, bool on) {
+    deck(deckIndex).quantize = on;
+    notifyListeners();
+  }
+
+  static const jumpSizes = [1, 2, 4, 8, 16, 32];
+
+  /// Rail size box: step through [jumpSizes].
+  void cycleJumpSize(int deckIndex) {
+    final d = deck(deckIndex);
+    final i = jumpSizes.indexOf(d.jumpBeats);
+    d.jumpBeats = jumpSizes[(i + 1) % jumpSizes.length];
+    notifyListeners();
+  }
+
+  /// Rail beat-jump buttons: [direction] -1 back, +1 forward by jumpBeats.
+  void jump(int deckIndex, int direction) {
+    final d = deck(deckIndex);
+    if (!d.loaded || d.bpm <= 1) return;
+    beatJump(deckIndex, direction * d.jumpBeats);
   }
 
   static const loopBeats = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0];
@@ -640,6 +704,7 @@ class DjController extends ChangeNotifier {
     _engine.nudgeGrid(deckIndex, seconds);
     final d = deck(deckIndex);
     d.beatOffset = _engine.beatOffset(deckIndex);
+    d.gridConfidence = -1; // hand-fixed: no longer "check grid"
     notifyListeners();
     _persistAnalysis(d, userEdited: true);
   }
@@ -669,6 +734,7 @@ class DjController extends ChangeNotifier {
         key: d.key,
         beatOffset: d.beatOffset,
         userEdited: userEdited,
+        gridConfidence: d.gridConfidence,
       );
     } catch (_) {}
   }

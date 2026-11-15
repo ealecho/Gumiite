@@ -19,6 +19,7 @@ class LibraryTrack {
     this.durationMs = 0,
     this.bpm,
     this.key,
+    this.gridUnsure = false,
   });
 
   final String path;
@@ -27,10 +28,12 @@ class LibraryTrack {
   final int durationMs;
   final double? bpm;
   final int? key;
+  /// Analysis found few kicks on the grid: worth checking before playing out.
+  final bool gridUnsure;
 
   bool get hasAnalysis => bpm != null && bpm! > 0;
 
-  LibraryTrack copyWith({double? bpm, int? key}) {
+  LibraryTrack copyWith({double? bpm, int? key, bool? gridUnsure}) {
     return LibraryTrack(
       path: path,
       title: title,
@@ -38,6 +41,7 @@ class LibraryTrack {
       durationMs: durationMs,
       bpm: bpm ?? this.bpm,
       key: key ?? this.key,
+      gridUnsure: gridUnsure ?? this.gridUnsure,
     );
   }
 }
@@ -244,6 +248,7 @@ class LibraryController extends ChangeNotifier {
     final parsed = splitTitleArtist(name);
     double? bpm;
     int? key;
+    var gridUnsure = false;
     try {
       final stat = await File(path).stat();
       final cached = await _cache.get(
@@ -254,6 +259,7 @@ class LibraryController extends ChangeNotifier {
       if (cached != null && cached.bpm > 0) {
         bpm = cached.bpm;
         key = cached.key;
+        gridUnsure = cached.gridUnsure;
       }
     } catch (_) {}
     tracks.add(LibraryTrack(
@@ -263,6 +269,7 @@ class LibraryController extends ChangeNotifier {
       durationMs: (fileDurationSec(path) * 1000).round(),
       bpm: bpm,
       key: key,
+      gridUnsure: gridUnsure,
     ));
   }
 
@@ -277,10 +284,10 @@ class LibraryController extends ChangeNotifier {
     _emit();
   }
 
-  void upsertAnalysis(String path, {double? bpm, int? key}) {
+  void upsertAnalysis(String path, {double? bpm, int? key, bool? gridUnsure}) {
     final i = tracks.indexWhere((t) => t.path == path);
     if (i < 0) return;
-    tracks[i] = tracks[i].copyWith(bpm: bpm, key: key);
+    tracks[i] = tracks[i].copyWith(bpm: bpm, key: key, gridUnsure: gridUnsure);
     _emit();
   }
 
@@ -336,9 +343,10 @@ class LibraryController extends ChangeNotifier {
             bpm: result.bpm,
             key: result.key,
             beatOffset: result.beatOffset,
+            gridConfidence: result.gridConfidence,
           );
         } catch (_) {}
-        upsertAnalysis(path, bpm: result.bpm, key: result.key);
+        upsertAnalysis(path, bpm: result.bpm, key: result.key, gridUnsure: result.gridUnsure);
         analyzed.add(path);
       }
     } catch (e) {

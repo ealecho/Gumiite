@@ -33,6 +33,7 @@ typedef _GetBpmC = Float Function(Pointer<Void>, Int32);
 typedef _GetKeyC = Int32 Function(Pointer<Void>, Int32);
 typedef _NudgeC = Void Function(Pointer<Void>, Int32, Float);
 typedef _SetLoopC = Void Function(Pointer<Void>, Int32, Int32, Float);
+typedef _SetLoopFromC = Void Function(Pointer<Void>, Int32, Float, Double);
 typedef _BeatJumpC = Void Function(Pointer<Void>, Int32, Int32);
 typedef _SetHotcueC = Void Function(Pointer<Void>, Int32, Int32, Double);
 typedef _GetHotcueC = Double Function(Pointer<Void>, Int32, Int32);
@@ -142,6 +143,14 @@ class NativeEngine {
   late final _getBeatOffset = _lib
       .lookupFunction<_GetBpmC, double Function(Pointer<Void>, int)>(
         'dj_get_beat_offset',
+      );
+  late final _getGridConfidence = _lib
+      .lookupFunction<_GetBpmC, double Function(Pointer<Void>, int)>(
+        'dj_get_grid_confidence',
+      );
+  late final _setLoopFrom = _lib
+      .lookupFunction<_SetLoopFromC, void Function(Pointer<Void>, int, double, double)>(
+        'dj_set_loop_from',
       );
   late final _nudgeGrid = _lib
       .lookupFunction<_NudgeC, void Function(Pointer<Void>, int, double)>(
@@ -286,9 +295,15 @@ class NativeEngine {
   double bpm(int deck) => _getBpm(_handle, deck);
   int key(int deck) => _getKey(_handle, deck);
   double beatOffset(int deck) => _getBeatOffset(_handle, deck);
+  /// Grid confidence from an analysis run at load (0..1); negative = unknown,
+  /// including when the load used cached analysis.
+  double gridConfidence(int deck) => _getGridConfidence(_handle, deck);
   void nudgeGrid(int deck, double seconds) => _nudgeGrid(_handle, deck, seconds);
   void setLoop(int deck, bool enabled, double bars) =>
       _setLoop(_handle, deck, enabled ? 1 : 0, bars);
+  /// Enable a loop of [bars] starting at [startSec] (quantized loop-in).
+  void setLoopFrom(int deck, double bars, double startSec) =>
+      _setLoopFrom(_handle, deck, bars, startSec);
   double loopStart(int deck) => _loopStart(_handle, deck);
   double loopEnd(int deck) => _loopEnd(_handle, deck);
   void beatJump(int deck, int beats) => _beatJump(_handle, deck, beats);

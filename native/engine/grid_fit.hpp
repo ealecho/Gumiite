@@ -17,6 +17,7 @@
 #include <optional>
 #include <vector>
 
+
 namespace grid_fit {
 
 struct Attack {
@@ -266,19 +267,70 @@ inline double onLine(const AttackMap& map, Fit f, double duration) {
   return sum;
 }
 
+// How tightly a line sits on the click-band attacks: the share of beats with
+// an attack within 15 ms, and the median distance of those attacks (ms).
+struct Lock {
+  double hitShare = 0.0;
+  double medianMs = 1e9;
+};
+
+inline Lock lockOf(const AttackMap& map, Fit f, double duration) {
+  Lock out;
+  if (f.period <= 0.0 || map.empty()) return out;
+  const long first = (long)std::ceil((0.0 - f.phase) / f.period);
+  const long last = (long)std::floor((duration - f.phase) / f.period);
+  int beats = 0;
+  std::vector<double> res;
+  for (long k = first; k <= last; ++k) {
+    const double predicted = f.phase + (double)k * f.period;
+    ++beats;
+    if (auto a = map.near(predicted, 0.015)) {
+      res.push_back(std::fabs(a->secs - predicted) * 1000.0);
+    }
+  }
+  if (beats == 0 || res.empty()) return out;
+  out.hitShare = (double)res.size() / (double)beats;
+  std::nth_element(res.begin(), res.begin() + (std::ptrdiff_t)(res.size() / 2), res.end());
+  out.medianMs = res[res.size() / 2];
+  return out;
+}
+
+// The click band only describes kicks that have a click. Measured on a deep /
+// afro house library, locked fits had 53-92% of beats on an attack with a
+// 0.3-1.9 ms median; soft, round kicks gave 13-36% at 2-6 ms, i.e. the fit
+// was reading hats and shakers. Only a fit this tight replaces the coarse
+// (low-band kick energy) grid.
+inline constexpr double kLockMinHitShare = 0.45;
+inline constexpr double kLockMaxMedianMs = 2.0;
+
+struct Refined {
+  std::optional<Fit> fit;  // none: keep the coarse grid
+  Lock lock;               // of the fit, when there was one
+};
+
 // Refine a coarse grid against the kick attacks. With `fixedPeriod` (a tag
 // BPM) only the phase moves. Otherwise the period is measured too and a whole
 // BPM within 0.1 is taken only while its line keeps >= 85% of the measured
-// line's hits. Returns none (keep the coarse grid) when the audio gives too
-// little to go on.
-inline std::optional<Fit> refine(const float* pcm, int frames, int channels, double sampleRate,
-                                 Fit coarse, bool fixedPeriod) {
-  if (frames <= 0 || sampleRate <= 0.0 || coarse.period <= 0.0) return std::nullopt;
+// line's hits. No fit when the audio gives too little to go on.
+inline Refined refine(const float* pcm, int frames, int channels, double sampleRate, Fit coarse,
+                      bool fixedPeriod) {
+  Refined out;
+  if (frames <= 0 || sampleRate <= 0.0 || coarse.period <= 0.0) return out;
   const double duration = (double)frames / sampleRate;
   const AttackMap map(pcm, frames, channels, sampleRate);
-  if (map.empty()) return std::nullopt;
+  if (map.empty()) return out;
   const std::optional<double> fixed =
       fixedPeriod ? std::optional<double>(coarse.period) : std::nullopt;
+  auto finish = [&](std::optional<Fit> f) {
+    if (f) {
+      out.lock = lockOf(map, *f, duration);
+      if (out.lock.hitShare < kLockMinHitShare || out.lock.medianMs > kLockMaxMedianMs) {
+        f.reset();  // not locked onto kicks: keep the coarse grid
+      }
+    }
+    out.fit = f;
+    return out;
+  };
 
   // A few snap-and-refit passes: each lands the predictions closer to the
   // hits they snap to.
@@ -290,21 +342,21 @@ inline std::optional<Fit> refine(const float* pcm, int frames, int channels, dou
     fit = next->first;
     any = true;
   }
-  if (!any) return std::nullopt;
-  if (fixedPeriod) return fit;
+  if (!any) return finish(std::nullopt);
+  if (fixedPeriod) return finish(fit);
 
   constexpr double kWholeBpmTolerance = 0.1;
   constexpr double kWholeBpmSupport = 0.85;
   const double bpm = 60.0 / fit.period;
   const double whole = std::round(bpm);
-  if (whole <= 0.0 || std::fabs(bpm - whole) > kWholeBpmTolerance) return fit;
+  if (whole <= 0.0 || std::fabs(bpm - whole) > kWholeBpmTolerance) return finish(fit);
   const Fit start{fit.phase, 60.0 / whole};
   auto snapped = snapAndFit(map, start, duration, start.period);
   const Fit candidate = snapped ? snapped->first : start;
   if (onLine(map, candidate, duration) < onLine(map, fit, duration) * kWholeBpmSupport) {
-    return fit;
+    return finish(fit);
   }
-  return candidate;
+  return finish(candidate);
 }
 
 }  // namespace grid_fit

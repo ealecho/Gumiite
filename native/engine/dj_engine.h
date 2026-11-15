@@ -54,9 +54,13 @@ DJ_FFI_EXPORT void dj_set_keylock(DjEngine engine, int deck, int enabled);
 DJ_FFI_EXPORT float dj_get_bpm(DjEngine engine, int deck);
 DJ_FFI_EXPORT int dj_get_key(DjEngine engine, int deck);
 DJ_FFI_EXPORT float dj_get_beat_offset(DjEngine engine, int deck);
+/** Grid confidence from analysis run at load (0..1, -1 unknown / loaded from cache). */
+DJ_FFI_EXPORT float dj_get_grid_confidence(DjEngine engine, int deck);
 DJ_FFI_EXPORT void dj_nudge_grid(DjEngine engine, int deck, float seconds);
 
 DJ_FFI_EXPORT void dj_set_loop(DjEngine engine, int deck, int enabled, float bars);
+/** Enable a loop starting at start_sec (a quantized loop-in), not the playhead. */
+DJ_FFI_EXPORT void dj_set_loop_from(DjEngine engine, int deck, float bars, double start_sec);
 DJ_FFI_EXPORT double dj_loop_start(DjEngine engine, int deck);
 DJ_FFI_EXPORT double dj_loop_end(DjEngine engine, int deck);
 DJ_FFI_EXPORT void dj_set_hotcue(DjEngine engine, int deck, int index, double seconds);
@@ -75,7 +79,8 @@ DJ_FFI_EXPORT int dj_wave_bands_columns(DjEngine engine, int deck, int overview)
 DJ_FFI_EXPORT int dj_wave_bands_copy(DjEngine engine, int deck, int overview, uint8_t* out, int columns);
 
 /** Decode a 60s prefix (22 kHz mono) + BPM/key/grid. Uses ID3 TBPM/TKEY when present. */
-DJ_FFI_EXPORT int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset);
+DJ_FFI_EXPORT int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset,
+                                  float* grid_confidence);
 
 /** Length in seconds from the file header / decoder. Does not decode PCM. */
 DJ_FFI_EXPORT double dj_file_duration(const char* path);

@@ -113,8 +113,9 @@ inline AnalysisResult analyzeTrackQueenMary(const float* interleaved, int frames
 
     // Land the grid on the kick attacks: measures period and phase from the
     // hits, and keeps Mixxx's rounded BPM only if the audio supports it.
-    if (auto fine = grid_fit::refine(interleaved, frames, ch, (double)sampleRate,
-                                     {phaseSec, periodSec}, false)) {
+    const grid_fit::Refined refined = grid_fit::refine(interleaved, frames, ch,
+                                                       (double)sampleRate, {phaseSec, periodSec}, false);
+    if (const auto& fine = refined.fit) {
       periodSec = fine->period;
       out.bpm = (float)(60.0 / periodSec);
       phaseSec = std::fmod(fine->phase, periodSec);
@@ -122,6 +123,42 @@ inline AnalysisResult analyzeTrackQueenMary(const float* interleaved, int frames
         phaseSec += periodSec;
       }
     }
+    auto wrapPhase = [](double phase, double period) {
+      const double p = std::fmod(phase, period);
+      return p < 0.0 ? p + period : p;
+    };
+    double hold = grid_phase::gridConfidence(env, phaseSec, periodSec, duration);
+    // Soft kicks the click fit couldn't lock: if the grid drifts through the
+    // track (an unchecked rounded BPM a few hundredths off), correct the tempo
+    // from the low-band offsets, keeping it only if it clearly holds better. A
+    // section stitched in at a different phase is a step, not a drift: no line
+    // fixes it, the hold stays low, and the track keeps its "check grid" flag.
+    if (!refined.fit && hold >= 0.0) {
+      if (auto fix = grid_phase::correctDrift(env, phaseSec, periodSec, duration)) {
+        grid_phase::GridLine best{wrapPhase(fix->phaseSec, fix->periodSec), fix->periodSec};
+        double bestHold = grid_phase::gridConfidence(env, best.phaseSec, best.periodSec, duration);
+        // Within 0.02 of a whole BPM it most likely is that whole BPM: keep it
+        // if it holds as well.
+        const double whole = std::round(60.0 / best.periodSec);
+        if (whole > 0.0 && std::fabs(60.0 / best.periodSec - whole) <= 0.02) {
+          const grid_phase::GridLine w{best.phaseSec, 60.0 / whole};
+          const double wHold = grid_phase::gridConfidence(env, w.phaseSec, w.periodSec, duration);
+          if (wHold >= bestHold - 0.02) {
+            best = w;
+            bestHold = wHold;
+          }
+        }
+        if (bestHold >= hold + 0.1) {
+          phaseSec = best.phaseSec;
+          periodSec = best.periodSec;
+          out.bpm = (float)(60.0 / periodSec);
+          hold = bestHold;
+        }
+      }
+    }
+    // A tight kick-attack lock is direct evidence the grid is on the kicks, so
+    // it is trusted even where the song's structure moves the low end around.
+    out.gridConfidence = refined.fit ? 1.0f : (float)hold;
 
     out.beatOffsetSec = (float)grid_phase::firstAudibleLine(interleaved, frames, ch,
                                                             (double)sampleRate, phaseSec, periodSec);

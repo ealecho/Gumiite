@@ -111,6 +111,7 @@ struct Deck {
   float bpm = 120.0f;
   int key = -1;
   float beatOffset = 0.0f;
+  float gridConfidence = -1.0f; // from the last analysis run here; -1 when loaded from cache
   std::atomic<int64_t> pendingJump{-1};
   std::atomic<bool> pendingLoopShift{false};
   std::atomic<double> pendingLoopDelta{0.0};
@@ -1054,6 +1055,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   d.bpm = analysis.bpm;
   d.key = analysis.key;
   d.beatOffset = analysis.beatOffsetSec;
+  d.gridConfidence = analysis.gridConfidence;
   d.waveMin = std::move(wmin);
   d.waveMax = std::move(wmax);
   d.bandDetail = std::move(bandDetail);
@@ -1078,7 +1080,8 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
 
 const char* dj_last_error(void) { return djGetLastError(); }
 
-int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset) {
+int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset,
+                    float* grid_confidence) {
   if (!path) {
     return 0;
   }
@@ -1097,6 +1100,9 @@ int dj_analyze_file(const char* path, float* bpm, int* key, float* beat_offset) 
   }
   if (beat_offset) {
     *beat_offset = analysis.beatOffsetSec;
+  }
+  if (grid_confidence) {
+    *grid_confidence = analysis.gridConfidence;
   }
   return 1;
 }
@@ -1312,6 +1318,15 @@ float dj_get_beat_offset(DjEngine engine, int deck) {
   return d.beatOffset;
 }
 
+float dj_get_grid_confidence(DjEngine engine, int deck) {
+  if (deck < 0 || deck > 1) {
+    return -1.0f;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  return d.gridConfidence;
+}
+
 void dj_nudge_grid(DjEngine engine, int deck, float seconds) {
   if (deck < 0 || deck > 1) {
     return;
@@ -1339,6 +1354,20 @@ void dj_set_loop(DjEngine engine, int deck, int enabled, float bars) {
   } else {
     d.captureLoopAtPlayhead();
   }
+}
+
+void dj_set_loop_from(DjEngine engine, int deck, float bars, double start_sec) {
+  if (deck < 0 || deck > 1) {
+    return;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  // Quantized loop-in: the loop starts on a given (beat) time rather than at
+  // the playhead. A playhead a hair before it just plays into the loop.
+  d.loopBars = std::max(0.25f, std::min(8.0f, bars));
+  d.loopStart = std::max(0.0, start_sec);
+  d.loopEnd = d.loopStart + d.loopLengthSec();
+  d.loopEnabled = true;
 }
 
 double dj_loop_start(DjEngine engine, int deck) {

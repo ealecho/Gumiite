@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:sidedeck/engine/music_utils.dart';
-import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 import 'package:sidedeck/ui/mixer_strip.dart';
@@ -143,19 +142,55 @@ class DeckPanel extends StatelessWidget {
     final tool = index == 0
         ? _railIcon(Icons.library_music, 'Library', onLibrary)
         : _railIcon(Icons.settings_outlined, 'Settings', onSettings);
-    final external = index == 0 && controller.externalMixer;
     final children = <Widget>[
       Padding(
         padding: const EdgeInsets.all(4),
         child: Row(children: [tag, const Spacer(), tool]),
       ),
-      if (external) _usbChip(),
       Expanded(
         child: FittedBox(
           fit: BoxFit.scaleDown,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            children: [_cueButton(d), const SizedBox(height: 8), _playButton(d)],
+            children: [
+              _cueButton(d),
+              const SizedBox(height: 8),
+              _playButton(d),
+              const SizedBox(height: 8),
+              // rbxport's rail: beat-jump pair, then size box (+ our Q toggle).
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _railChip(
+                    icon: Icons.fast_rewind,
+                    enabled: d.loaded && d.bpm > 1,
+                    onTap: () => controller.jump(index, -1),
+                  ),
+                  const SizedBox(width: 4),
+                  _railChip(
+                    icon: Icons.fast_forward,
+                    enabled: d.loaded && d.bpm > 1,
+                    onTap: () => controller.jump(index, 1),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _railChip(
+                    label: 'Q',
+                    lit: d.quantize,
+                    onTap: () => controller.setQuantize(index, !d.quantize),
+                  ),
+                  const SizedBox(width: 4),
+                  _railChip(
+                    label: '${d.jumpBeats}',
+                    onTap: () => controller.cycleJumpSize(index),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -177,25 +212,31 @@ class DeckPanel extends StatelessWidget {
     );
   }
 
-  /// External mixer status, kept to one small line: the blue outline marks it
-  /// as the USB output, so only the device name is spelled out.
-  Widget _usbChip() {
-    final name = UsbOutput.deviceLabel(controller.usbDeviceName);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+  /// Small rail button: tap ([onTap]) or hold-to-repeat ([onStep]).
+  Widget _railChip({
+    String? label,
+    IconData? icon,
+    bool lit = false,
+    bool enabled = true,
+    VoidCallback? onTap,
+    VoidCallback? onStep,
+  }) {
+    final fg = enabled ? Colors.white : SideDeckTheme.deckOutline;
+    final face = Container(
+      width: 22,
+      height: 20,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        border: Border.all(color: SideDeckTheme.deckLit),
+        color: lit ? SideDeckTheme.deckLit : SideDeckTheme.deckButton,
         borderRadius: BorderRadius.circular(2),
       ),
-      child: Text(
-        name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
-      ),
+      child: icon != null
+          ? Icon(icon, size: 13, color: fg)
+          : Text(label!, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, height: 1, color: fg)),
     );
+    if (!enabled) return face;
+    if (onStep != null) return HoldRepeatButton(onStep: onStep, child: face);
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: face);
   }
 
   /// CDJ-style CUE (see DjController.cueDown): reacts on press, and release
@@ -330,7 +371,11 @@ class DeckPanel extends StatelessWidget {
         sep(),
         _time(d.position, color: SideDeckTheme.deckDim),
         sep(),
-        _mono(d.bpm > 1 ? heard.toStringAsFixed(2) : '—', SideDeckTheme.deckText),
+        if (d.gridUnsure) ...[const GridWarningBadge(), const SizedBox(width: 4)],
+        _mono(
+          d.bpm > 1 ? heard.toStringAsFixed(2) : '—',
+          d.gridUnsure ? GridWarningBadge.colour : SideDeckTheme.deckText,
+        ),
         sep(),
         _mono(pctLabel, d.synced ? SideDeckTheme.deckLit : SideDeckTheme.deckDim),
         sep(),
@@ -427,6 +472,30 @@ class DeckPanel extends StatelessWidget {
       _DeckButton(label: '›', onStep: () => controller.shiftGridMs(index, 5)),
       gap,
     ];
+  }
+}
+
+/// Amber "!" (optionally with a label) for a grid that analysis was unsure of:
+/// few kicks landed on it, so check it before playing out (openDJ's grid_unsure).
+class GridWarningBadge extends StatelessWidget {
+  const GridWarningBadge({super.key, this.label});
+
+  final String? label;
+
+  static const colour = Color(0xFFFFA600);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: label == null ? 0 : 4, vertical: 1),
+      constraints: const BoxConstraints(minWidth: 13, minHeight: 13),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: colour, borderRadius: BorderRadius.circular(2)),
+      child: Text(
+        label ?? '!',
+        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: Colors.black, height: 1.1),
+      ),
+    );
   }
 }
 

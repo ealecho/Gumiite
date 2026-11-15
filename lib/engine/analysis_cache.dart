@@ -20,6 +20,7 @@ class AnalysisCache {
         key_idx INTEGER,
         beat_offset REAL,
         user_edited INTEGER NOT NULL DEFAULT 0,
+        grid_conf REAL,
         PRIMARY KEY (path, analyzer)
       )
     ''');
@@ -30,17 +31,28 @@ class AnalysisCache {
     final dbPath = await getDatabasesPath();
     _db = await openDatabase(
       p.join(dbPath, 'sidedeck_analysis.db'),
-      version: 10,
+      version: 13,
       onCreate: (db, version) => _createTable(db),
       onUpgrade: (db, oldVersion, newVersion) async {
+        // Keep existing grids (including hand fixes): migrate in place.
         if (oldVersion == 9) {
-          // Keep existing grids (including hand fixes): migrate in place.
           // From here on a grid edit marks the row user_edited.
           await db.execute(
             'ALTER TABLE analysis ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0',
           );
-          return;
         }
+        if (oldVersion == 9 || oldVersion == 10) {
+          // Unknown (NULL) for rows analyzed before confidence was measured.
+          await db.execute('ALTER TABLE analysis ADD COLUMN grid_conf REAL');
+        }
+        if (oldVersion == 11 || oldVersion == 12) {
+          // v11 counted kick clicks and v12 low-band kick hits per beat; on a
+          // deep/afro house library neither told good grids from bad (soft
+          // kicks, offbeat bass). v13 measures whether the grid holds through
+          // the track. Forget the old values.
+          await db.execute('UPDATE analysis SET grid_conf = NULL');
+        }
+        if (oldVersion >= 9) return;
         await db.execute('DROP TABLE IF EXISTS analysis');
         await _createTable(db);
       },
@@ -74,6 +86,7 @@ class AnalysisCache {
       bpm: (row['bpm'] as num?)?.toDouble() ?? 0,
       key: (row['key_idx'] as num?)?.toInt() ?? -1,
       beatOffset: (row['beat_offset'] as num?)?.toDouble() ?? 0,
+      gridConfidence: (row['grid_conf'] as num?)?.toDouble() ?? -1,
     );
   }
 
@@ -85,6 +98,7 @@ class AnalysisCache {
     required int key,
     required double beatOffset,
     bool userEdited = false,
+    double gridConfidence = -1,
   }) async {
     final db = await _open();
     await db.insert('analysis', {
@@ -96,6 +110,7 @@ class AnalysisCache {
       'key_idx': key,
       'beat_offset': beatOffset,
       'user_edited': userEdited ? 1 : 0,
+      'grid_conf': gridConfidence < 0 ? null : gridConfidence,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

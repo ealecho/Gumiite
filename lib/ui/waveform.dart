@@ -207,6 +207,57 @@ class WaveformPainter extends CustomPainter {
     );
   }
 
+  static const _phraseBars = 8;
+  static const _barLabel = Color(0xFF367BDA);
+
+  /// rbxport-style bar count left of the playhead, plus the bars left until
+  /// the next 8-bar phrase: "33.2 ▸3". Bar 1 is the grid's first beat, so it
+  /// is only as right as the downbeat the analysis picked.
+  void _paintBarCounter(Canvas canvas, double width, double top, double bottom) {
+    if (bpm <= 1) return;
+    final beats = (position - beatOffset) / (60.0 / bpm);
+    if (beats < 0) return;
+    final whole = beats.floor();
+    final bar = whole ~/ 4 + 1;
+    final beat = whole % 4 + 1;
+    final toPhrase = _phraseBars - (bar - 1) % _phraseBars;
+    final tp = TextPainter(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$bar.$beat',
+            style: const TextStyle(
+              color: _barLabel,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+          TextSpan(
+            text: '  ▸$toPhrase',
+            style: TextStyle(
+              color: toPhrase == 1 ? _downbeatHead : const Color(0xFF9A9A9A),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    const padX = 6.0, padY = 2.0;
+    final boxW = tp.width + padX * 2;
+    final boxH = tp.height + padY * 2;
+    final left = width / 2 - 8 - boxW;
+    // Below the cue triangles and hot cue badges on the deck's outer edge.
+    final boxTop = hangDown ? bottom - 18 - boxH : top + 18;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(left, boxTop, boxW, boxH), const Radius.circular(2)),
+      Paint()..color = const Color(0xCC000000),
+    );
+    tp.paint(canvas, Offset(left + padX, boxTop + padY));
+  }
+
   /// Hot cue marker on the detail: a faint line in the slot colour and a
   /// lettered square badge on the deck's outer edge (rbxport's badge style).
   void _paintHotCue(Canvas canvas, double width, double top, double bottom, double x, int slot) {
@@ -307,6 +358,7 @@ class WaveformPainter extends CustomPainter {
       if (hotCues[i] >= 0) _paintHotCue(canvas, width, top, bottom, xForTime(hotCues[i]), i);
     }
     if (cuePoint >= 0) _paintCue(canvas, width, top, bottom, xForTime(cuePoint));
+    _paintBarCounter(canvas, width, top, bottom);
 
     canvas.drawRect(
       Rect.fromLTWH(width / 2 - 0.75, top, 1.5, bottom - top),
