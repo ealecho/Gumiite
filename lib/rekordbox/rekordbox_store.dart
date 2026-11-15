@@ -186,11 +186,11 @@ class RekordboxStore {
 
   /// A grid fixed by hand on the deck: keep it (and drop "check grid"). No-op
   /// for tracks that weren't imported.
-  Future<void> updateGrid(String path, double beatOffset) async {
+  Future<void> updateGrid(String path, double beatOffset, {double? bpm}) async {
     final db = await _open();
     await db.update(
       'tracks',
-      {'beat_offset': beatOffset, 'grid_conf': -1},
+      {'beat_offset': beatOffset, 'grid_conf': -1, 'bpm': ?bpm},
       where: 'path = ?',
       whereArgs: [path],
     );

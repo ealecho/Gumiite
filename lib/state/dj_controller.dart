@@ -235,6 +235,8 @@ class DjController extends ChangeNotifier {
     }
     d.path = path;
     d.openPath = openPath;
+    _gridUndo[deckIndex].clear(); // undo belongs to the track it was made on
+    _taps[deckIndex].clear();
     d.title = title ?? path.split(RegExp(r'[\\/]')).last;
     d.artist = artist ?? '';
     d.loaded = true;
@@ -713,28 +715,107 @@ class DjController extends ChangeNotifier {
     _applySlaveTempo(slave);
   }
 
-  void nudgeGrid(int deckIndex, double seconds) {
-    _engine.nudgeGrid(deckIndex, seconds);
+  // Grid editing (GRID mode), after Mixxx's beats_* controls, openDJ and rbxport.
+  static const _gridUndoDepth = 32;
+  final List<List<(double, double)>> _gridUndo = [[], []]; // (bpm, beatOffset)
+  final List<List<int>> _taps = [[], []]; // tap tempo, ms timestamps
+
+  bool canUndoGrid(int deckIndex) => _gridUndo[deckIndex].isNotEmpty;
+
+  /// Applies a hand-edited grid: normalises the offset to the first downbeat
+  /// at or after the track start (whole bars, so bar numbers don't move),
+  /// keeps a synced pair matched, clears "check grid" and saves it.
+  void _setGrid(int deckIndex, double bpm, double beatOffset, {bool undoable = true}) {
     final d = deck(deckIndex);
-    d.beatOffset = _engine.beatOffset(deckIndex);
+    if (!d.loaded || bpm <= 1) return;
+    if (undoable) {
+      final stack = _gridUndo[deckIndex]..add((d.bpm, d.beatOffset));
+      if (stack.length > _gridUndoDepth) stack.removeAt(0);
+    }
+    final bar = 4 * 60.0 / bpm;
+    final offset = beatOffset - (beatOffset / bar).floorToDouble() * bar;
+    _engine.setGrid(deckIndex, bpm, offset);
+    d.bpm = bpm;
+    d.beatOffset = offset;
     d.gridConfidence = -1; // hand-fixed: no longer "check grid"
+    if (d.synced) _applySlaveTempo(deckIndex);
+    _followMasterBpm(deckIndex);
     notifyListeners();
     _persistAnalysis(d, userEdited: true);
     // An imported track loads its grid from the stick import, so keep the fix there too.
     final path = d.path;
-    if (path != null) RekordboxStore.instance.updateGrid(path, d.beatOffset);
+    if (path != null) RekordboxStore.instance.updateGrid(path, offset, bpm: bpm);
   }
 
-  /// Shift the painted grid. Negative = earlier (yellow moves left).
-  void shiftGridBeats(int deckIndex, int beats) {
+  /// Moves the whole grid by [seconds] (the ‹ › 5 ms nudge).
+  void nudgeGrid(int deckIndex, double seconds) {
+    final d = deck(deckIndex);
+    _setGrid(deckIndex, d.bpm, d.beatOffset + seconds);
+  }
+
+  void shiftGridMs(int deckIndex, int milliseconds) => nudgeGrid(deckIndex, milliseconds / 1000.0);
+
+  /// BEAT HERE: the beat line nearest the playhead moves onto it.
+  void gridBeatHere(int deckIndex) {
     final d = deck(deckIndex);
     if (!d.loaded || d.bpm <= 1) return;
-    nudgeGrid(deckIndex, beats * (60.0 / d.bpm));
+    final pos = _engine.position(deckIndex);
+    nudgeGrid(deckIndex, pos - _nearestBeat(d, pos));
   }
 
-  void shiftGridMs(int deckIndex, int milliseconds) {
-    if (!deck(deckIndex).loaded) return;
-    nudgeGrid(deckIndex, milliseconds / 1000.0);
+  /// BAR HERE: the playhead becomes bar 1, beat 1 (a downbeat).
+  void gridBarHere(int deckIndex) {
+    final d = deck(deckIndex);
+    if (!d.loaded || d.bpm <= 1) return;
+    _setGrid(deckIndex, d.bpm, _engine.position(deckIndex));
+  }
+
+  /// A new tempo, stretched about the beat line nearest the playhead so the
+  /// beat you are looking at stays put.
+  void _setGridTempo(int deckIndex, double bpm, {bool undoable = true}) {
+    final d = deck(deckIndex);
+    if (!d.loaded || d.bpm <= 1 || bpm <= 1) return;
+    final anchor = _nearestBeat(d, _engine.position(deckIndex));
+    final period = 60.0 / bpm;
+    final k = ((anchor - d.beatOffset) / period).roundToDouble();
+    _setGrid(deckIndex, bpm, anchor - k * period, undoable: undoable);
+  }
+
+  /// BPM ±0.01 (hold to repeat).
+  void gridBpmStep(int deckIndex, double delta) {
+    final d = deck(deckIndex);
+    _setGridTempo(deckIndex, ((d.bpm + delta) * 100).roundToDouble() / 100);
+  }
+
+  /// ½ / ×2: the analysis caught half or double the real tempo.
+  void gridBpmScale(int deckIndex, double factor) {
+    final d = deck(deckIndex);
+    final bpm = d.bpm * factor;
+    if (bpm < 40 || bpm > 250) return;
+    _setGridTempo(deckIndex, bpm);
+  }
+
+  /// TAP: once four taps are in, the BPM follows their average interval (the
+  /// last sixteen); a pause of over two seconds starts over.
+  void gridTap(int deckIndex) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final taps = _taps[deckIndex];
+    if (taps.isNotEmpty && now - taps.last > 2000) taps.clear();
+    taps.add(now);
+    if (taps.length > 16) taps.removeAt(0);
+    if (taps.length < 4) return;
+    final interval = (taps.last - taps.first) / (taps.length - 1);
+    final bpm = (60000 / interval * 100).roundToDouble() / 100;
+    if (bpm < 40 || bpm > 250) return;
+    // One undo step for a whole run of taps.
+    _setGridTempo(deckIndex, bpm, undoable: taps.length == 4);
+  }
+
+  void undoGrid(int deckIndex) {
+    final stack = _gridUndo[deckIndex];
+    if (stack.isEmpty) return;
+    final (bpm, offset) = stack.removeLast();
+    _setGrid(deckIndex, bpm, offset, undoable: false);
   }
 
   Future<void> _persistAnalysis(DeckState d, {bool userEdited = false}) async {

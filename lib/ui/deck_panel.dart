@@ -63,19 +63,14 @@ class DeckPanel extends StatelessWidget {
       playing: d.playing,
       zoom: zoom,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
-      onScrub: d.loaded && !gridEditing ? (t) => controller.seekTo(index, t) : null,
-      onZoom: d.loaded && !gridEditing ? onZoom : null,
+      onScrub: d.loaded ? (t) => controller.seekTo(index, t) : null,
+      onZoom: d.loaded ? onZoom : null,
     );
 
     Widget detail = wave(WavePart.detail);
-    if (gridEditing) {
-      // Tapping the wave closes the grid editor instead of jumping.
-      detail = GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onToggleGrid,
-        child: AbsorbPointer(child: detail),
-      );
-    } else if (d.loaded) {
+    // In GRID mode the wave still scrubs and zooms (BEAT HERE / BAR HERE need
+    // a kick under the playhead first); only the nudge glyphs step aside.
+    if (d.loaded && !gridEditing) {
       // Nudge sits either side of the playhead: − slows/jogs back, + speeds
       // up/jogs forward. Stacked above the wave so a press never scrubs it.
       // The builder runs later, so it must not read `detail` after this
@@ -314,7 +309,8 @@ class DeckPanel extends StatelessWidget {
         children: [
           // Title and readouts share what the buttons leave; readouts shrink
           // to fit rather than squeezing the title out.
-          Expanded(flex: 2, child: _title(d)),
+          // GRID mode has more buttons: give the title less of the row.
+          Expanded(flex: gridEditing ? 1 : 2, child: _title(d)),
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
@@ -456,21 +452,36 @@ class DeckPanel extends StatelessWidget {
     ];
   }
 
+  /// GRID mode: fix a grid by hand. Tempo changes stretch about the beat at
+  /// the playhead; every change can be undone.
   List<Widget> _gridEditor() {
     const gap = SizedBox(width: 3);
-    Widget caption(String s) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Text(s, style: const TextStyle(fontSize: 10, color: SideDeckTheme.deckDim)),
-    );
+    const groupGap = SizedBox(width: 8);
     return [
-      _DeckButton(label: '«', onStep: () => controller.shiftGridBeats(index, -1)),
-      caption('BEAT'),
-      _DeckButton(label: '»', onStep: () => controller.shiftGridBeats(index, 1)),
-      const SizedBox(width: 10),
-      _DeckButton(label: '‹', onStep: () => controller.shiftGridMs(index, -5)),
-      caption('5 MS'),
-      _DeckButton(label: '›', onStep: () => controller.shiftGridMs(index, 5)),
+      _DeckButton(label: 'BEAT', sub: 'HERE', width: 38, onTap: () => controller.gridBeatHere(index)),
       gap,
+      _DeckButton(label: 'BAR', sub: 'HERE', width: 38, onTap: () => controller.gridBarHere(index)),
+      groupGap,
+      _DeckButton(label: '‹', sub: '5 MS', onStep: () => controller.shiftGridMs(index, -5)),
+      gap,
+      _DeckButton(label: '›', sub: '5 MS', onStep: () => controller.shiftGridMs(index, 5)),
+      groupGap,
+      _DeckButton(label: '−', sub: '.01', onStep: () => controller.gridBpmStep(index, -0.01)),
+      gap,
+      _DeckButton(label: '+', sub: '.01', onStep: () => controller.gridBpmStep(index, 0.01)),
+      gap,
+      _DeckButton(label: '½', sub: 'BPM', onTap: () => controller.gridBpmScale(index, 0.5)),
+      gap,
+      _DeckButton(label: '×2', sub: 'BPM', onTap: () => controller.gridBpmScale(index, 2)),
+      groupGap,
+      _DeckButton(label: 'TAP', width: 36, onPress: () => controller.gridTap(index)),
+      gap,
+      _DeckButton(
+        label: 'UNDO',
+        width: 40,
+        enabled: controller.canUndoGrid(index),
+        onTap: () => controller.undoGrid(index),
+      ),
     ];
   }
 }
@@ -606,7 +617,8 @@ class _NudgePainter extends CustomPainter {
 }
 
 /// rbxport-style deck button: flat #282828, 2 px corners, blue when lit.
-/// [onTap] fires once; [onStep] repeats while held.
+/// [onTap] fires once; [onStep] repeats while held; [onPress] fires the moment
+/// the finger lands (tap tempo, where release timing would add jitter).
 class _DeckButton extends StatelessWidget {
   const _DeckButton({
     required this.label,
@@ -616,6 +628,7 @@ class _DeckButton extends StatelessWidget {
     this.enabled = true,
     this.onTap,
     this.onStep,
+    this.onPress,
   });
 
   final String label;
@@ -625,6 +638,7 @@ class _DeckButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback? onTap;
   final VoidCallback? onStep;
+  final VoidCallback? onPress;
 
   @override
   Widget build(BuildContext context) {
@@ -653,6 +667,9 @@ class _DeckButton extends StatelessWidget {
     );
     if (!enabled) return face;
     if (onStep != null) return HoldRepeatButton(onStep: onStep!, child: face);
+    if (onPress != null) {
+      return Listener(behavior: HitTestBehavior.opaque, onPointerDown: (_) => onPress!(), child: face);
+    }
     return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: face);
   }
 }

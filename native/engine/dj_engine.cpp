@@ -1336,6 +1336,18 @@ void dj_nudge_grid(DjEngine engine, int deck, float seconds) {
   d.beatOffset += seconds;
 }
 
+void dj_set_grid(DjEngine engine, int deck, float bpm, float beat_offset) {
+  if (deck < 0 || deck > 1) {
+    return;
+  }
+  Deck& d = asEngine(engine)->decks[deck];
+  std::lock_guard<std::mutex> lock(d.mutex);
+  if (bpm > 1.0f) {
+    d.bpm = bpm;
+  }
+  d.beatOffset = beat_offset;
+}
+
 void dj_set_loop(DjEngine engine, int deck, int enabled, float bars) {
   if (deck < 0 || deck > 1) {
     return;

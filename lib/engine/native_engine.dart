@@ -32,6 +32,7 @@ typedef _SetMasterC = Void Function(Pointer<Void>, Float);
 typedef _GetBpmC = Float Function(Pointer<Void>, Int32);
 typedef _GetKeyC = Int32 Function(Pointer<Void>, Int32);
 typedef _NudgeC = Void Function(Pointer<Void>, Int32, Float);
+typedef _SetGridC = Void Function(Pointer<Void>, Int32, Float, Float);
 typedef _SetLoopC = Void Function(Pointer<Void>, Int32, Int32, Float);
 typedef _SetLoopFromC = Void Function(Pointer<Void>, Int32, Float, Double);
 typedef _BeatJumpC = Void Function(Pointer<Void>, Int32, Int32);
@@ -155,6 +156,10 @@ class NativeEngine {
   late final _nudgeGrid = _lib
       .lookupFunction<_NudgeC, void Function(Pointer<Void>, int, double)>(
         'dj_nudge_grid',
+      );
+  late final _setGrid = _lib
+      .lookupFunction<_SetGridC, void Function(Pointer<Void>, int, double, double)>(
+        'dj_set_grid',
       );
   late final _setLoop = _lib
       .lookupFunction<_SetLoopC, void Function(Pointer<Void>, int, int, double)>(
@@ -299,6 +304,8 @@ class NativeEngine {
   /// including when the load used cached analysis.
   double gridConfidence(int deck) => _getGridConfidence(_handle, deck);
   void nudgeGrid(int deck, double seconds) => _nudgeGrid(_handle, deck, seconds);
+  /// Replace the grid: BPM and first-downbeat offset in seconds.
+  void setGrid(int deck, double bpm, double beatOffset) => _setGrid(_handle, deck, bpm, beatOffset);
   void setLoop(int deck, bool enabled, double bars) =>
       _setLoop(_handle, deck, enabled ? 1 : 0, bars);
   /// Enable a loop of [bars] starting at [startSec] (quantized loop-in).

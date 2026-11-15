@@ -30,6 +30,7 @@ __attribute__((used)) static void* const kDjFfiKeep[] = {
     (void*)&dj_get_beat_offset,
     (void*)&dj_get_grid_confidence,
     (void*)&dj_nudge_grid,
+    (void*)&dj_set_grid,
     (void*)&dj_set_loop,
     (void*)&dj_set_loop_from,
     (void*)&dj_loop_start,

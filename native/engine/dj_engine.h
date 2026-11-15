@@ -57,6 +57,8 @@ DJ_FFI_EXPORT float dj_get_beat_offset(DjEngine engine, int deck);
 /** Grid confidence from analysis run at load (0..1, -1 unknown / loaded from cache). */
 DJ_FFI_EXPORT float dj_get_grid_confidence(DjEngine engine, int deck);
 DJ_FFI_EXPORT void dj_nudge_grid(DjEngine engine, int deck, float seconds);
+/** Replace the deck's grid: BPM (ignored if <= 1) and first-downbeat offset (s). */
+DJ_FFI_EXPORT void dj_set_grid(DjEngine engine, int deck, float bpm, float beat_offset);
 
 DJ_FFI_EXPORT void dj_set_loop(DjEngine engine, int deck, int enabled, float bars);
 /** Enable a loop starting at start_sec (a quantized loop-in), not the playhead. */
