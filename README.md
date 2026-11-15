@@ -39,7 +39,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![The library: Local, Remote, USB and History tabs, Camelot keys (compatible ones coloured), the "check grid" warning, a track ticked as played this session, and the filter box](screenshots/library.png)
 
-![The History tab: this session's plays with number, time and deck, ready to reload](screenshots/history.png)
+![The History tab: sessions newest first, each play with its number, time and deck, ready to reload](screenshots/history.png)
 
 ![The USB tab, for importing a rekordbox stick](screenshots/usb.png)
 
@@ -53,6 +53,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | Navigation | Drag the waveform to scrub; bar / phrase counter |
 | Mixer | Restyled faders with a centre notch and blue offset fill; filter fader optional; hide it to give the decks the screen |
 | Auto gain | Every track levelled to the same loudness without clipping |
+| Tempo | Key lock switch; optional tempo fader per deck (±8 / ±16 / ±50 %) |
 | Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase |
 | Cues | Cue and hot cues saved per track and restored on load |
 | Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
@@ -154,6 +155,19 @@ With both decks playing it also shifts the synced deck by under half a beat so
 the beats line up; a synced deck started under a playing deck snaps into phase
 as it starts. It aligns beats, not bars.
 
+### Tempo fader and key lock
+
+- **Key lock** (Settings → Tempo, on by default): the pitch stays put when the
+  tempo changes. Off, pitch follows tempo like a turntable.
+- **Tempo fader** (Settings → Tempo → Tempo fader on the deck rails, off by
+  default to keep the rail compact): a third rail column per deck, after the
+  CDJ's tempo slider. **KEY** above it sets key lock for that deck; the fader
+  is drag-only and relative, so a stray tap never jumps the tempo, clicks into
+  0 % on the way through and resets on double-tap; the button below cycles the
+  range ±8 / ±16 / ±50 %. Pulling it down speeds up, as on a CDJ (a setting
+  flips it). It follows SYNC and − / +, and moving it ends sync. Range and key
+  lock are remembered per deck.
+
 ### Auto gain
 
 Tracks are levelled to a common loudness, after Mixxx's ReplayGain-based track
@@ -238,6 +252,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 - **Key display** (Settings): Camelot `10A` (default), musical `Bm`, or both.
 - **On-screen mixer** (Settings): show or hide the filter fader.
 - **Auto gain** (Settings): on or off.
+- **Tempo** (Settings): key lock, the tempo fader, and its direction.
 - **Search fix:** the filter could stay active after a search while the box
   looked empty, so other tracks could not be picked. The box now shows the
   active filter and has a clear button.
@@ -266,6 +281,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | A B C D | Control row | Hot cues: tap set or jump, long-press clear |
 | ½ · LOOP · ×2 | Control row | Halve, toggle, double the loop |
 | − · SYNC · + | Control row | BPM ±0.1, beat sync |
+| KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
 | GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
 | USB tab | Library | Import a rekordbox stick |
