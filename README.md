@@ -33,7 +33,11 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![The restyled internal mixer](screenshots/mixer.png)
 
-![The library: Camelot keys (compatible ones coloured), the "check grid" warning, and the filter box](screenshots/library.png)
+![GRID mode on deck A (beat here, bar here, 5 ms, BPM, tap, undo) with the internal mixer hidden](screenshots/grid.png)
+
+![The library: Local, Remote and USB tabs, Camelot keys (compatible ones coloured), the "check grid" warning, and the filter box](screenshots/library.png)
+
+![The USB tab, for importing a rekordbox stick](screenshots/usb.png)
 
 ## What this fork adds
 
@@ -43,11 +47,11 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | Waveforms | rbxport-style 3-band waveforms, mirrored at a shared centre line; pinch zoom; smooth motion |
 | Deck controls | New control row and transport rail, CUE, hot cues A–D, quantize, beat jump, on-wave nudge |
 | Navigation | Drag the waveform to scrub; bar / phrase counter |
-| Mixer | Restyled faders with a centre notch and blue offset fill |
+| Mixer | Restyled faders with a centre notch and blue offset fill; hide it to give the decks the screen |
 | Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase |
 | Cues | Cue and hot cues saved per track and restored on load |
-| Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected |
-| Library | Key display setting (Camelot / musical / both); search filter fix |
+| Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
+| Library | Key display setting (Camelot / musical / both); search filter fix; rekordbox USB import (untested on a real stick) |
 
 Details of each are below.
 
@@ -121,6 +125,11 @@ notch, and a blue fill from the centre so any EQ, filter or crossfader move away
 from flat is visible. In external mixer mode the strip is hidden and the decks
 use the whole screen.
 
+The **▼** above the crossfader hides the internal mixer too, so the decks get
+the whole screen; a slim **▲ MIXER** strip at the bottom brings it back. EQ,
+filter and crossfader keep their settings while hidden, and the choice is
+remembered.
+
 ### Sync
 
 SYNC matches the synced deck's tempo to the other deck and keeps following it.
@@ -157,6 +166,46 @@ Studied from [Mixxx](https://github.com/mixxxdj/mixxx),
 Grids analyzed by an older build keep their old values until re-analyzed
 ("Re-analyze all" in the library).
 
+### Fixing a grid by hand (GRID mode)
+
+Tap **GRID** on a deck. The wave still scrubs and zooms, so put a kick under
+the playhead first:
+
+| Button | What it does |
+|---|---|
+| BEAT HERE | The beat line nearest the playhead moves onto it |
+| BAR HERE | The playhead becomes bar 1, beat 1 |
+| ‹ › 5 MS | Shift the whole grid (hold to repeat) |
+| − / + .01 | BPM down / up by 0.01 (hold to repeat) |
+| ½ / ×2 BPM | Analysis caught half or double the real tempo |
+| TAP | Tap along; from the 4th tap the BPM follows your average |
+| UNDO | Step back through grid edits (up to 32) |
+
+Tempo changes stretch the grid about the beat under the playhead, so a drifting
+grid can be fixed by lining up one kick and adjusting the BPM until a later
+kick lines up too. Every edit is saved, marks the track as hand-fixed and
+clears "check grid"; a synced deck re-matches its tempo.
+
+### rekordbox USB import (phase 1, untested on a real stick)
+
+The library's **USB** tab imports a stick exported from rekordbox: tap the USB
+icon and pick the stick's root (the folder holding `PIONEER` and `Contents`),
+connected through a USB-C hub alongside the mixer if needed.
+
+- Tracks, playlists (folders shown as `Folder / Playlist`), keys, beat grids and
+  cues come in. The readers for `export.pdb` and the ANLZ analysis files are
+  ported from rbxport.
+- Grids prepared in rekordbox take precedence over SideDeck's analysis. A grid
+  with tempo changes or a restarting bar count uses its opening section and
+  shows "check grid" (following them exactly needs variable grids, planned).
+- The earliest memory cue becomes CUE; hot cues A–D fill the pads, unless the
+  track already has cues in SideDeck.
+- Audio plays from the stick where Android allows it, otherwise from a cached
+  copy; the imported grids and cues stay after unplugging.
+
+Not yet covered: encrypted "OneLibrary-only" sticks, hot cues E–H, hot loops,
+cue colours and comments. It has only been tested on synthetic files so far.
+
 ### Library and settings
 
 - **Key display** (Settings): Camelot `10A` (default), musical `Bm`, or both.
@@ -178,7 +227,9 @@ Grids analyzed by an older build keep their old values until re-analyzed
 | A B C D | Control row | Hot cues: tap set or jump, long-press clear |
 | ½ · LOOP · ×2 | Control row | Halve, toggle, double the loop |
 | − · SYNC · + | Control row | BPM ±0.1, beat sync |
-| GRID | Control row | Shift the grid by a beat or 5 ms |
+| GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
+| ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
+| USB tab | Library | Import a rekordbox stick |
 
 ## Requirements
 
@@ -225,7 +276,8 @@ engine is compiled by CMake during the Xcode build.
 - Beat detector: Queen Mary TempoTrackV2 + Mixxx BeatUtils, refined on kick attacks and checked for drift; key: Queen Mary GetKeyMode
 - Beat sync, loops (½ / ×2), BPM ±0.1, nudge, quantize, beat jump
 - CUE and hot cues A–D, saved per track; waveform scrubbing; pinch zoom
-- GRID edits the beatgrid (1 beat or 5 ms); "check grid" warning
+- GRID mode fixes the beatgrid (beat here, bar here, BPM edit, tap tempo, undo); "check grid" warning
+- rekordbox USB import (tracks, playlists, grids, cues) - untested on a real stick
 - Local folder/file picker; sort; analyze missing or all (iPhone: Files app / Finder sharing)
 - Library highlights keys compatible with a loaded deck
 - Subsonic browse and cache-to-file
