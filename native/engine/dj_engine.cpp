@@ -385,40 +385,6 @@ struct Deck {
   }
 };
 
-std::vector<float> resampleMono(const std::vector<float>& mono, int srcSr, int dstSr) {
-  if (srcSr <= 0 || dstSr <= 0 || mono.empty() || srcSr == dstSr) {
-    return mono;
-  }
-  const int frames = (int)mono.size();
-  const double ratio = (double)dstSr / (double)srcSr;
-  const int outFrames = std::max(1, (int)(frames * ratio));
-  std::vector<float> out((size_t)outFrames);
-  for (int i = 0; i < outFrames; ++i) {
-    const double src = (double)i / ratio;
-    const int i0 = std::min((int)src, frames - 1);
-    const int i1 = std::min(i0 + 1, frames - 1);
-    const float frac = (float)(src - (double)i0);
-    out[(size_t)i] = mono[(size_t)i0] * (1.0f - frac) + mono[(size_t)i1] * frac;
-  }
-  return out;
-}
-
-std::vector<float> interleavedToMono(const std::vector<float>& interleaved, unsigned int channels,
-                                     drmp3_uint64 frames) {
-  if (channels <= 1) {
-    if (interleaved.size() > (size_t)frames) {
-      return std::vector<float>(interleaved.begin(), interleaved.begin() + (size_t)frames);
-    }
-    return interleaved;
-  }
-  std::vector<float> mono((size_t)frames);
-  for (drmp3_uint64 i = 0; i < frames; ++i) {
-    const size_t base = (size_t)i * (size_t)channels;
-    mono[(size_t)i] = 0.5f * (interleaved[base] + interleaved[base + 1]);
-  }
-  return mono;
-}
-
 struct AtomicFlag {
   std::atomic<bool>& flag;
   explicit AtomicFlag(std::atomic<bool>& f) : flag(f) { flag.store(true); }
@@ -900,21 +866,54 @@ struct Engine {
     if (frames < 1) {
       return {};
     }
-    std::vector<float> stereo((size_t)frames * 2);
+    // Stream in chunks, mixing to mono and resampling (linear interpolation,
+    // carried across chunk edges) as we go, so a whole track never sits in
+    // memory as native-rate stereo.
+    const int srcSr = (int)dec.sampleRate;
+    const bool same = srcSr == targetSr || targetSr <= 0;
+    const double step = same ? 1.0 : (double)srcSr / (double)targetSr; // src frames per output
+    std::vector<float> out;
+    out.reserve((size_t)((double)frames / step) + 1);
+    constexpr uint64_t kChunk = 65536;
+    std::vector<float> stereo((size_t)kChunk * 2);
+    std::vector<float> mono;
     dec.seek(0);
+    uint64_t base = 0;  // source index of mono[0]
+    float prev = 0.0f;  // source sample base - 1
+    double src = 0.0;   // source position of the next output sample
     uint64_t got = 0;
     while (got < frames) {
-      const uint64_t n = dec.readStereo(stereo.data() + got * 2, frames - got);
+      const uint64_t n = dec.readStereo(stereo.data(), std::min(kChunk, frames - got));
       if (n == 0) {
         break;
       }
+      mono.resize((size_t)n);
+      for (uint64_t i = 0; i < n; ++i) {
+        mono[(size_t)i] = 0.5f * (stereo[(size_t)i * 2] + stereo[(size_t)i * 2 + 1]);
+      }
       got += n;
+      auto at = [&](uint64_t j) { return j < base ? prev : mono[(size_t)(j - base)]; };
+      // Emit every output whose right-hand neighbour is already decoded.
+      while ((uint64_t)src + 1 < base + n) {
+        const uint64_t i0 = (uint64_t)src;
+        const float frac = (float)(src - (double)i0);
+        out.push_back(at(i0) * (1.0f - frac) + at(i0 + 1) * frac);
+        src += step;
+      }
+      prev = mono[(size_t)n - 1];
+      base += n;
     }
     if (got < 1) {
       return {};
     }
-    stereo.resize((size_t)got * 2);
-    return resampleMono(interleavedToMono(stereo, 2, got), (int)dec.sampleRate, targetSr);
+    // Tail: the last source frame has no right neighbour, so hold it out to
+    // floor(frames / step) outputs.
+    const uint64_t outFrames = same ? got : std::max<uint64_t>(1, (uint64_t)((double)got / step));
+    while (out.size() < outFrames) {
+      out.push_back(prev);
+    }
+    out.resize((size_t)outFrames);
+    return out;
   }
 
   static double fileDurationSec(const char* path) {
@@ -997,15 +996,15 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
     analysis.beatOffsetSec = beat_offset;
   } else {
     const id3_meta::Tags tags = id3_meta::read(path);
-    auto prefix = Engine::decodeAnalyzeMono(path, (int)analyze_detail::kAnalyzeSr);
-    if (prefix.empty()) {
+    auto pcm = Engine::decodeAnalyzeMono(path, (int)analyze_detail::kAnalyzeSr);
+    if (pcm.empty()) {
       if (djGetLastError()[0] == '\0') {
         djSetLastError("Couldn't decode this file.");
       }
       return 0;
     }
     analysis =
-        analyzeTrack(prefix.data(), (int)prefix.size(), 1, analyze_detail::kAnalyzeSr, tags.bpm,
+        analyzeTrack(pcm.data(), (int)pcm.size(), 1, analyze_detail::kAnalyzeSr, tags.bpm,
                      tags.key);
   }
 

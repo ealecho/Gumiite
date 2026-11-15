@@ -16,10 +16,12 @@ struct AnalysisResult {
 
 namespace analyze_detail {
 
-// First 60s of the file, mixed to mono. Playback still uses the full
-// file; BPM/key/grid only need a short prefix.
+// The whole track, mixed to mono, as Mixxx, rbxport and openDJ do: a 60 s
+// prefix let a beatless intro skew the BPM and left too few beats to pin the
+// tempo (127.95 vs 128 BPM drifts ~115 ms by minute 5). Capped so an hour-long
+// mix doesn't stall a load; the decode streams, so memory stays ~4 B/sample.
 inline constexpr float kAnalyzeSr = 22050.0f;
-inline constexpr float kAnalyzeWindowSec = 60.0f;
+inline constexpr float kAnalyzeWindowSec = 900.0f;
 
 // GetKeyMode chroma max is MIDI 96 (~2.1 kHz). Keep Nyquist above that
 // after the built-in downsample (default 8× at 44.1 kHz).

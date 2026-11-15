@@ -300,8 +300,14 @@ class LibraryController extends ChangeNotifier {
     return _analyzeList(pending);
   }
 
+  /// Re-analyze the library, except tracks whose grid was fixed by hand
+  /// (re-analyze those one at a time to replace the fix on purpose).
   Future<List<String>> analyzeAll() async {
-    return _analyzeList(tracks.map((t) => t.path).toList());
+    Set<String> edited = const {};
+    try {
+      edited = await _cache.userEditedPaths();
+    } catch (_) {}
+    return _analyzeList(tracks.map((t) => t.path).where((p) => !edited.contains(p)).toList());
   }
 
   Future<List<String>> _analyzeList(List<String> paths) async {

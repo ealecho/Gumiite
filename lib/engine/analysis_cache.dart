@@ -19,6 +19,7 @@ class AnalysisCache {
         bpm REAL,
         key_idx INTEGER,
         beat_offset REAL,
+        user_edited INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (path, analyzer)
       )
     ''');
@@ -29,14 +30,34 @@ class AnalysisCache {
     final dbPath = await getDatabasesPath();
     _db = await openDatabase(
       p.join(dbPath, 'sidedeck_analysis.db'),
-      version: 9,
+      version: 10,
       onCreate: (db, version) => _createTable(db),
       onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion == 9) {
+          // Keep existing grids (including hand fixes): migrate in place.
+          // From here on a grid edit marks the row user_edited.
+          await db.execute(
+            'ALTER TABLE analysis ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0',
+          );
+          return;
+        }
         await db.execute('DROP TABLE IF EXISTS analysis');
         await _createTable(db);
       },
     );
     return _db!;
+  }
+
+  /// Tracks whose grid was fixed by hand; "re-analyze all" leaves them alone.
+  Future<Set<String>> userEditedPaths() async {
+    final db = await _open();
+    final rows = await db.query(
+      'analysis',
+      columns: ['path'],
+      where: 'analyzer = ? AND user_edited = 1',
+      whereArgs: [_analyzer],
+    );
+    return {for (final r in rows) r['path'] as String};
   }
 
   Future<TrackAnalysis?> get(String path, int size, int mtime) async {
@@ -63,6 +84,7 @@ class AnalysisCache {
     required double bpm,
     required int key,
     required double beatOffset,
+    bool userEdited = false,
   }) async {
     final db = await _open();
     await db.insert('analysis', {
@@ -73,6 +95,7 @@ class AnalysisCache {
       'bpm': bpm,
       'key_idx': key,
       'beat_offset': beatOffset,
+      'user_edited': userEdited ? 1 : 0,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }

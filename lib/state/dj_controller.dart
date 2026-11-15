@@ -335,6 +335,9 @@ class DjController extends ChangeNotifier {
       return;
     }
     final next = !d.playing;
+    // A synced deck starting under a playing master snaps into beat phase,
+    // as CDJ beat sync does. (A cue preview start is left exactly on the cue.)
+    if (next && d.synced && deck(1 - deckIndex).playing) _alignPhase(deckIndex);
     _engine.play(deckIndex, next);
     d.playing = next;
     notifyListeners();
@@ -577,8 +580,9 @@ class DjController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Match [slave] tempo to the other deck and keep following its BPM.
-  /// Does not move the playhead. Press SYNC on the deck you want to change.
+  /// Match [slave] tempo to the other deck and keep following its BPM. With
+  /// both decks playing it also snaps [slave] into beat phase (see
+  /// [_alignPhase]). Press SYNC on the deck you want to change.
   void sync(int slave) {
     final masterIdx = 1 - slave;
     if (!deck(slave).loaded || !deck(masterIdx).loaded) return;
@@ -586,7 +590,30 @@ class DjController extends ChangeNotifier {
     deck(slave).synced = true;
     deck(masterIdx).synced = false;
     _applySlaveTempo(slave);
+    if (deck(slave).playing && deck(masterIdx).playing) _alignPhase(slave);
     notifyListeners();
+  }
+
+  /// Beat sync: shift [slave] by under half a beat so its position within
+  /// the beat matches the other deck's. Both grids come from analysis (BPM
+  /// and first-beat offset, in file seconds), so each uses its own period.
+  void _alignPhase(int slave) {
+    final s = deck(slave);
+    final m = deck(1 - slave);
+    if (!s.loaded || !m.loaded || s.bpm <= 1 || m.bpm <= 1) return;
+    double phase(int i, DeckState d) {
+      final beats = (_engine.position(i) - d.beatOffset) / (60.0 / d.bpm);
+      return beats - beats.floorToDouble();
+    }
+
+    var diff = phase(1 - slave, m) - phase(slave, s);
+    diff -= diff.roundToDouble(); // shortest way round: -0.5 .. 0.5 beat
+    if (diff.abs() < 0.002) return;
+    final target = (_engine.position(slave) + diff * 60.0 / s.bpm)
+        .clamp(0.0, math.max(0.0, s.duration))
+        .toDouble();
+    _engine.seek(slave, target);
+    s.position = target;
   }
 
   double _tempoMatchRate(DeckState slave, DeckState master) {
@@ -614,7 +641,7 @@ class DjController extends ChangeNotifier {
     final d = deck(deckIndex);
     d.beatOffset = _engine.beatOffset(deckIndex);
     notifyListeners();
-    _persistAnalysis(d);
+    _persistAnalysis(d, userEdited: true);
   }
 
   /// Shift the painted grid. Negative = earlier (yellow moves left).
@@ -629,7 +656,7 @@ class DjController extends ChangeNotifier {
     nudgeGrid(deckIndex, milliseconds / 1000.0);
   }
 
-  Future<void> _persistAnalysis(DeckState d) async {
+  Future<void> _persistAnalysis(DeckState d, {bool userEdited = false}) async {
     final path = d.path;
     if (path == null || path.isEmpty || d.bpm <= 0) return;
     try {
@@ -641,6 +668,7 @@ class DjController extends ChangeNotifier {
         bpm: d.bpm,
         key: d.key,
         beatOffset: d.beatOffset,
+        userEdited: userEdited,
       );
     } catch (_) {}
   }
