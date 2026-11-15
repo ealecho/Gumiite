@@ -138,6 +138,53 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const Divider(height: 32),
           const Text(
+            'Tempo',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Key lock'),
+            subtitle: const Text(
+              'Keeps the pitch when the tempo changes. Off: pitch follows tempo like '
+              'a turntable. Both decks; the KEY button on the tempo fader sets one.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.keylockAll,
+            onChanged: (v) async {
+              await widget.dj.setKeylockAll(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Tempo fader on the deck rails'),
+            subtitle: const Text(
+              'A fader per deck (double-tap to reset) with KEY above it and its range '
+              'below (±8 / ±16 / ±50 %). Off saves room; − / + and SYNC still set tempo.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showTempoFader,
+            onChanged: (v) async {
+              await widget.dj.setShowTempoFader(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Pull the fader down to speed up'),
+            subtitle: const Text(
+              'As on a CDJ. Off: push it up to speed up.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.tempoDownFaster,
+            onChanged: (v) async {
+              await widget.dj.setTempoDownFaster(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
             'Key display',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),

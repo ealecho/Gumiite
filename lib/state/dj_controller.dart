@@ -65,6 +65,11 @@ class DeckState {
   Uint8List bandOverview = Uint8List(0);
   int bandsPerSec = 150;
 
+  /// Tempo fader range: full travel is ±this (see DjController.tempoRanges).
+  double tempoRange = 0.08;
+  /// Key lock (master tempo): pitch held while the tempo changes.
+  bool keylock = true;
+
   /// Seconds this load has been heard (see DjController.playedAfterSec).
   double audibleSec = 0;
   /// Logged to the play history already for this load.
@@ -83,6 +88,90 @@ class DjController extends ChangeNotifier {
     _loadAutoGain();
     _loadShowFilter();
     _loadHistory();
+    _loadTempoPrefs();
+  }
+
+  // Tempo fader and key lock, per deck, after the CDJ's TEMPO range and
+  // MASTER TEMPO buttons.
+  static const tempoRanges = [0.08, 0.16, 0.50];
+
+  /// Fader pulled down speeds up, as on a CDJ; off, up speeds up.
+  bool tempoDownFaster = true;
+
+  /// The rail's tempo column (KEY, fader, range); off by default for room.
+  bool showTempoFader = false;
+
+  Future<void> setShowTempoFader(bool on) async {
+    showTempoFader = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_tempo_fader', on);
+  }
+
+  /// Key lock on both decks, for the Settings switch.
+  bool get keylockAll => deckA.keylock && deckB.keylock;
+
+  Future<void> setKeylockAll(bool on) async {
+    await setKeylock(0, on);
+    await setKeylock(1, on);
+  }
+
+  Future<void> _loadTempoPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (var i = 0; i < 2; i++) {
+      final d = deck(i);
+      final range = prefs.getDouble('tempo_range_$i');
+      if (range != null && tempoRanges.contains(range)) d.tempoRange = range;
+      d.keylock = prefs.getBool('keylock_$i') ?? true;
+      _engine.setKeylock(i, d.keylock);
+    }
+    tempoDownFaster = prefs.getBool('tempo_down_faster') ?? true;
+    showTempoFader = prefs.getBool('show_tempo_fader') ?? false;
+    notifyListeners();
+  }
+
+  /// Fader position for the deck's current tempo, -1..1 (pegs at the ends
+  /// when sync or the ± buttons went past the range).
+  double tempoFader(int deckIndex) {
+    final d = deck(deckIndex);
+    return ((d.rate - 1) / d.tempoRange).clamp(-1.0, 1.0).toDouble();
+  }
+
+  void setTempoFader(int deckIndex, double v) {
+    final d = deck(deckIndex);
+    if (!d.loaded) return;
+    setRate(deckIndex, (1 + v.clamp(-1.0, 1.0) * d.tempoRange).clamp(0.5, 2.0).toDouble());
+  }
+
+  void resetTempo(int deckIndex) {
+    if (!deck(deckIndex).loaded) return;
+    setRate(deckIndex, 1);
+  }
+
+  /// Next range; the tempo stays where it is.
+  Future<void> cycleTempoRange(int deckIndex) async {
+    final d = deck(deckIndex);
+    final i = tempoRanges.indexOf(d.tempoRange);
+    d.tempoRange = tempoRanges[(i + 1) % tempoRanges.length];
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('tempo_range_$deckIndex', d.tempoRange);
+  }
+
+  Future<void> setKeylock(int deckIndex, bool on) async {
+    final d = deck(deckIndex);
+    d.keylock = on;
+    _engine.setKeylock(deckIndex, on);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('keylock_$deckIndex', on);
+  }
+
+  Future<void> setTempoDownFaster(bool on) async {
+    tempoDownFaster = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tempo_down_faster', on);
   }
 
   // Play history, after Mixxx's "played" marks and session history: a track

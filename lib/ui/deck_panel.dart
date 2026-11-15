@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sidedeck/engine/music_utils.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
@@ -36,6 +39,8 @@ class DeckPanel extends StatelessWidget {
   final ValueChanged<double> onZoom;
 
   static const _railW = 104.0;
+  /// Extra rail width for the tempo column, when shown.
+  static const _tempoW = 38.0;
   static const _rowH = 30.0;
 
   bool get _hang => index == 1;
@@ -106,7 +111,7 @@ class DeckPanel extends StatelessWidget {
     Widget body = Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(width: _railW, child: _rail(d)),
+        SizedBox(width: _railW + (controller.showTempoFader ? _tempoW : 0), child: _rail(d)),
         const SizedBox(width: 2),
         Expanded(
           child: Column(
@@ -147,8 +152,57 @@ class DeckPanel extends StatelessWidget {
         // Keep clear of the centre line, so deck B's CUE isn't right against
         // deck A's buttons.
         child: Padding(
-          padding: EdgeInsets.only(top: _hang ? 10 : 2, bottom: _hang ? 2 : 10),
-          child: FittedBox(
+          padding: EdgeInsets.only(top: _hang ? 10 : 2, bottom: _hang ? 2 : 10, right: controller.showTempoFader ? 6 : 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _transport(d)),
+              if (controller.showTempoFader) ...[
+                const SizedBox(width: 6),
+                _tempoColumn(d),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ];
+    return ColoredBox(
+      color: SideDeckTheme.deckRow,
+      child: Column(children: _hang ? children.reversed.toList() : children),
+    );
+  }
+
+  /// CDJ-style tempo column: KEY (key lock), the fader, and its range.
+  Widget _tempoColumn(DeckState d) {
+    final pct = (d.tempoRange * 100).round();
+    return SizedBox(
+      width: 30,
+      child: Column(
+        children: [
+          _railChip(
+            label: 'KEY',
+            lit: d.keylock,
+            onTap: () => controller.setKeylock(index, !d.keylock),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: TempoFader(
+              value: controller.tempoFader(index),
+              downIsFaster: controller.tempoDownFaster,
+              enabled: d.loaded,
+              onChanged: (v) => controller.setTempoFader(index, v),
+              onReset: () => controller.resetTempo(index),
+            ),
+          ),
+          const SizedBox(height: 4),
+          _railChip(label: '±$pct', onTap: () => controller.cycleTempoRange(index)),
+        ],
+      ),
+    );
+  }
+
+  Widget _transport(DeckState d) {
+    return FittedBox(
             fit: BoxFit.scaleDown,
             // Two columns: CUE over PLAY, and beside them rbxport's beat-jump
             // pair, our Q toggle and the jump-size box.
@@ -194,13 +248,6 @@ class DeckPanel extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    ];
-    return ColoredBox(
-      color: SideDeckTheme.deckRow,
-      child: Column(children: _hang ? children.reversed.toList() : children),
     );
   }
 
@@ -696,4 +743,126 @@ class _DeckButton extends StatelessWidget {
     }
     return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: face);
   }
+}
+
+/// Vertical tempo fader, value -1..1 (0 = original tempo). Drag-only and
+/// relative, so a stray tap never jumps the tempo; it clicks into 0 % on the
+/// way through, and a double-tap resets. Down is faster when [downIsFaster]
+/// (CDJ), and the stretch from the centre is filled like the mixer faders.
+class TempoFader extends StatefulWidget {
+  const TempoFader({
+    super.key,
+    required this.value,
+    required this.onChanged,
+    required this.onReset,
+    this.downIsFaster = true,
+    this.enabled = true,
+  });
+
+  final double value;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onReset;
+  final bool downIsFaster;
+  final bool enabled;
+
+  @override
+  State<TempoFader> createState() => _TempoFaderState();
+}
+
+class _TempoFaderState extends State<TempoFader> {
+  static const _detent = 0.03;
+  double _raw = 0;
+
+  void _start(DragStartDetails _) => _raw = widget.value;
+
+  void _update(DragUpdateDetails e, double height) {
+    if (height <= 0) return;
+    // Full travel (top to bottom) covers the whole -1..1 range.
+    final step = e.delta.dy / height * 2 * (widget.downIsFaster ? 1 : -1);
+    final before = _raw;
+    _raw = (_raw + step).clamp(-1.0, 1.0).toDouble();
+    final was = before.abs() < _detent ? 0.0 : before;
+    final now = _raw.abs() < _detent ? 0.0 : _raw;
+    if (now == 0 && was != 0) HapticFeedback.selectionClick();
+    if (now != was) widget.onChanged(now);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final fader = CustomPaint(
+          size: Size(c.maxWidth, c.maxHeight),
+          painter: _TempoFaderPainter(
+            value: widget.value,
+            downIsFaster: widget.downIsFaster,
+            enabled: widget.enabled,
+          ),
+        );
+        if (!widget.enabled) return fader;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onVerticalDragStart: _start,
+          onVerticalDragUpdate: (e) => _update(e, c.maxHeight),
+          onDoubleTap: () {
+            HapticFeedback.selectionClick();
+            widget.onReset();
+          },
+          child: fader,
+        );
+      },
+    );
+  }
+}
+
+class _TempoFaderPainter extends CustomPainter {
+  _TempoFaderPainter({required this.value, required this.downIsFaster, required this.enabled});
+
+  final double value;
+  final bool downIsFaster;
+  final bool enabled;
+
+  static const _rail = Color(0xFF323232);
+  static const _notch = Color(0xFF8A8A8A);
+  static const _thumbH = 10.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final top = _thumbH / 2;
+    final bottom = size.height - _thumbH / 2;
+    final mid = (top + bottom) / 2;
+    final half = (bottom - top) / 2;
+    final y = mid + value * half * (downIsFaster ? 1 : -1);
+
+    canvas.drawRect(Rect.fromLTRB(cx - 1.5, top, cx + 1.5, bottom), Paint()..color = _rail);
+    if ((y - mid).abs() > 0.5) {
+      canvas.drawRect(
+        Rect.fromLTRB(cx - 1.5, math.min(y, mid), cx + 1.5, math.max(y, mid)),
+        Paint()..color = SideDeckTheme.deckLit,
+      );
+    }
+    // Centre (0 %) mark across the rail, and the faster end's "+".
+    canvas.drawRect(Rect.fromCenter(center: Offset(cx, mid), width: 14, height: 1.5), Paint()..color = _notch);
+    final plusY = downIsFaster ? bottom : top;
+    final minusY = downIsFaster ? top : bottom;
+    final glyph = Paint()
+      ..color = _notch
+      ..strokeWidth = 1.2;
+    canvas.drawLine(Offset(size.width - 6, plusY - 3), Offset(size.width - 6, plusY + 3), glyph);
+    canvas.drawLine(Offset(size.width - 9, plusY), Offset(size.width - 3, plusY), glyph);
+    canvas.drawLine(Offset(size.width - 9, minusY), Offset(size.width - 3, minusY), glyph);
+
+    if (!enabled) return;
+    final body = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset(cx, y), width: 20, height: _thumbH),
+      const Radius.circular(2),
+    );
+    canvas.drawRRect(body, Paint()..color = SideDeckTheme.deckOutline);
+    canvas.drawRect(Rect.fromCenter(center: Offset(cx, y), width: 14, height: 1.5), Paint()..color = const Color(0xFFD0D0D0));
+  }
+
+  @override
+  bool shouldRepaint(_TempoFaderPainter old) =>
+      old.value != value || old.downIsFaster != downIsFaster || old.enabled != enabled;
 }

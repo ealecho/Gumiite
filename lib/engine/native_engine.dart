@@ -134,6 +134,8 @@ class NativeEngine {
       .lookupFunction<_SetMasterC, void Function(Pointer<Void>, double)>(
         'dj_set_master',
       );
+  late final _setKeylock = _lib
+      .lookupFunction<_PlayC, void Function(Pointer<Void>, int, int)>('dj_set_keylock');
   late final _setRate = _lib
       .lookupFunction<_SetFloatDeckC, void Function(Pointer<Void>, int, double)>(
         'dj_set_rate',
@@ -302,6 +304,9 @@ class NativeEngine {
   void setXfader(double x) => _setXfader(_handle, x);
   void setMaster(double v) => _setMaster(_handle, v);
   void setRate(int deck, double rate) => _setRate(_handle, deck, rate);
+  /// Key lock: tempo changes keep the pitch (time stretch); off, pitch follows
+  /// tempo like a turntable. On by default in the engine.
+  void setKeylock(int deck, bool on) => _setKeylock(_handle, deck, on ? 1 : 0);
   double bpm(int deck) => _getBpm(_handle, deck);
   int key(int deck) => _getKey(_handle, deck);
   double beatOffset(int deck) => _getBeatOffset(_handle, deck);

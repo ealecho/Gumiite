@@ -25,6 +25,7 @@ __attribute__((used)) static void* const kDjFfiKeep[] = {
     (void*)&dj_set_xfader,
     (void*)&dj_set_master,
     (void*)&dj_set_rate,
+    (void*)&dj_set_keylock,
     (void*)&dj_get_bpm,
     (void*)&dj_get_key,
     (void*)&dj_get_beat_offset,
