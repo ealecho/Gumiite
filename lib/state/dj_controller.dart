@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/analysis_cache.dart';
+import 'package:sidedeck/engine/auto_cue.dart';
 import 'package:sidedeck/engine/cue_store.dart';
 import 'package:sidedeck/engine/history_store.dart';
 import 'package:sidedeck/engine/music_utils.dart' as music;
@@ -189,6 +190,7 @@ class DjController extends ChangeNotifier {
     showSections = prefs.getBool('show_sections') ?? true;
     fullWaveform = prefs.getBool('full_waveform') ?? false;
     showHotCues = prefs.getBool('show_hot_cues') ?? true;
+    autoCue = prefs.getBool('auto_cue') ?? true;
     notifyListeners();
   }
 
@@ -608,6 +610,7 @@ class DjController extends ChangeNotifier {
     }
 
     await _restoreCues(deckIndex, path);
+    _autoCue(deckIndex, path);
 
     loadingDeck = null;
     loadingTitle = null;
@@ -641,6 +644,29 @@ class DjController extends ChangeNotifier {
       d.cuePoint = saved.cue;
       d.position = saved.cue;
     }
+  }
+
+  /// CDJ Auto Cue: with no saved cue, park on the first beat where the music
+  /// starts (see [autoCuePoint]). Not saved, so a later grid fix moves it.
+  void _autoCue(int deckIndex, String path) {
+    final d = deck(deckIndex);
+    if (!autoCue || d.path != path || !d.loaded || d.playing || d.cuePoint > 0) return;
+    final t = autoCuePoint(d.bandDetail, d.bandsPerSec, d.bpm, d.beatOffset, d.duration);
+    if (t <= 0) return;
+    _engine.seek(deckIndex, t);
+    _engine.setCue(deckIndex);
+    d.cuePoint = t;
+    d.position = t;
+  }
+
+  /// Settings → Deck buttons → Auto cue.
+  bool autoCue = true;
+
+  Future<void> setAutoCue(bool on) async {
+    autoCue = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('auto_cue', on);
   }
 
   void _saveCues(int deckIndex) {

@@ -181,6 +181,20 @@ class _SettingsPageState extends State<SettingsPage> {
               if (mounted) setState(() {});
             },
           ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto cue'),
+            subtitle: const Text(
+              'On load, the cue sits on the first beat where the music starts, '
+              'skipping any silence, as on a CDJ. A cue you set yourself is kept instead.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.autoCue,
+            onChanged: (v) async {
+              await widget.dj.setAutoCue(v);
+              if (mounted) setState(() {});
+            },
+          ),
           const Divider(height: 32),
           const Text(
             'Waveform',

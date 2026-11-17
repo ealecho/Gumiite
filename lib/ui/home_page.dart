@@ -150,6 +150,9 @@ class _HomePageState extends State<HomePage> {
     final dj = _dj;
     final library = _library;
     if (dj == null || library == null) return;
+    // A bottom sheet drops the top inset, so the tray would run under an
+    // upright phone's camera cutout; hand it the home screen's.
+    final topInset = MediaQuery.paddingOf(context).top;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -162,13 +165,19 @@ class _HomePageState extends State<HomePage> {
             context: context,
             removeLeft: true,
             removeRight: true,
-            child: LibraryOverlay(
-              dj: dj,
-              library: library,
-              onOpenSettings: () async {
-                Navigator.pop(context);
-                await _openSettings();
-              },
+            child: ColoredBox(
+              color: SideDeckTheme.panel,
+              child: Padding(
+                padding: EdgeInsets.only(top: topInset),
+                child: LibraryOverlay(
+                  dj: dj,
+                  library: library,
+                  onOpenSettings: () async {
+                    Navigator.pop(context);
+                    await _openSettings();
+                  },
+                ),
+              ),
             ),
           ),
         );
