@@ -34,10 +34,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    SystemChrome.setPreferredOrientations(const [
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    // Orientation follows Settings → Screen (DjController.screenOrientation).
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _loadMixerHidden();
     try {
@@ -203,6 +200,7 @@ class _HomePageState extends State<HomePage> {
 
     final dj = _djReady;
     final library = _library!;
+    final portrait = MediaQuery.orientationOf(context) == Orientation.portrait;
     return AnimatedBuilder(
       animation: Listenable.merge([dj, library]),
       builder: (context, _) {
@@ -214,10 +212,10 @@ class _HomePageState extends State<HomePage> {
               color: Colors.black,
               child: Column(
                 children: [
-                  Expanded(flex: 6, child: _deck(0)),
+                  Expanded(flex: 6, child: _deck(0, portrait)),
                   // Shared center line: deck A's detail rises to it, deck B's hangs from it.
                   const SizedBox(height: 1, child: ColoredBox(color: Color(0xFF323232))),
-                  Expanded(flex: 6, child: _deck(1)),
+                  Expanded(flex: 6, child: _deck(1, portrait)),
                   // External mixer: the hardware mixes, so the decks get the whole screen.
                   if (!dj.externalMixer)
                     // Without the filter the strip needs less room; the decks
@@ -297,10 +295,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _deck(int i) {
+  Widget _deck(int i, bool portrait) {
     return DeckPanel(
       controller: _djReady,
       index: i,
+      portrait: portrait,
       gridEditing: _gridEditDeck == i,
       onToggleGrid: () => setState(() => _gridEditDeck = _gridEditDeck == i ? null : i),
       onLoad: _openLibrary,

@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sidedeck/engine/music_utils.dart';
+import 'package:sidedeck/engine/sections.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
+import 'package:sidedeck/ui/bpm_pad.dart';
 import 'package:sidedeck/ui/mixer_strip.dart';
 import 'package:sidedeck/ui/track_info.dart';
 import 'package:sidedeck/ui/waveform.dart';
@@ -25,8 +27,11 @@ class DeckPanel extends StatelessWidget {
     required this.onSettings,
     required this.zoom,
     required this.onZoom,
+    this.portrait = false,
   });
 
+  /// Phone held upright: the stacked layout without the side rail.
+  final bool portrait;
   final DjController controller;
   final int index;
   final bool gridEditing;
@@ -34,11 +39,13 @@ class DeckPanel extends StatelessWidget {
   final VoidCallback onLoad;
   final VoidCallback onLibrary;
   final VoidCallback onSettings;
+
   /// Detail zoom in heard seconds, shared by both decks so their grids match.
   final double zoom;
   final ValueChanged<double> onZoom;
 
   static const _railW = 104.0;
+
   /// Extra rail width for the tempo column, when shown.
   static const _tempoW = 38.0;
   static const _rowH = 30.0;
@@ -66,6 +73,10 @@ class DeckPanel extends StatelessWidget {
       cuePoint: d.loaded ? d.cuePoint : -1,
       // A copy, so the painter can tell when a slot changes.
       hotCues: d.loaded ? List.of(d.hotCues) : const [],
+      sections: d.loaded && controller.showSections
+          ? sectionsFor(d.bandDetail, d.bandsPerSec, d.bpm, d.beatOffset, d.duration)
+          : const [],
+      fullWave: controller.fullWaveform,
       playing: d.playing,
       zoom: zoom,
       onOverviewSeek: d.loaded ? (t) => controller.seekTo(index, t) : null,
@@ -102,6 +113,7 @@ class DeckPanel extends StatelessWidget {
         },
       );
     }
+    if (portrait) return _portraitBody(context, d, wave(WavePart.overview), detail);
     final rows = <Widget>[
       SizedBox(height: WaveformPainter.overviewH, child: wave(WavePart.overview)),
       SizedBox(height: _rowH, child: _controlRow(context, d)),
@@ -126,6 +138,117 @@ class DeckPanel extends StatelessWidget {
     }
     return ColoredBox(color: SideDeckTheme.deckBg, child: body);
   }
+
+  /// Portrait: no side rail. Overview, a title/readout row, the performance
+  /// row and a horizontal transport row, then the detail; deck B stacks the
+  /// other way round so both details still meet at the line between decks.
+  /// The tempo fader stays landscape-only (± and the SYNC pad set tempo).
+  Widget _portraitBody(BuildContext context, DeckState d, Widget overview, Widget detail) {
+    final tool = index == 0
+        ? _railIcon(Icons.library_music, 'Library', onLibrary)
+        : _railIcon(Icons.settings_outlined, 'Settings', onSettings);
+    final info = Container(
+      height: 26,
+      color: SideDeckTheme.deckRow,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        children: [
+          _deckTag(),
+          const SizedBox(width: 6),
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: d.loaded ? () => showTrackInfo(context, controller, index) : onLoad,
+              child: d.loaded
+                  ? _title(d)
+                  : Text(
+                      'Deck ${index == 0 ? 'A' : 'B'} — tap to load a track',
+                      style: const TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          tool,
+        ],
+      ),
+    );
+    final readouts = Container(
+      height: 20,
+      color: SideDeckTheme.deckRow,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      alignment: Alignment.centerLeft,
+      child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _readouts(d)),
+    );
+    final perf = Container(
+      height: _rowH,
+      color: SideDeckTheme.deckRow,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      child: d.loaded
+          ? FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ...(gridEditing ? _gridEditor() : _performanceControls(context, d)),
+                  const SizedBox(width: 6),
+                  _DeckButton(label: 'GRID', lit: gridEditing, width: 40, onTap: onToggleGrid),
+                ],
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+    final jumpOk = d.loaded && d.bpm > 1;
+    final transport = Container(
+      height: 56,
+      color: SideDeckTheme.deckRow,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Row(
+        children: [
+          _cueButton(d),
+          const SizedBox(width: 14),
+          _playButton(d),
+          const Spacer(),
+          _railChip(icon: Icons.fast_rewind, enabled: jumpOk, onTap: () => controller.jump(index, -1)),
+          const SizedBox(width: 6),
+          _railChip(icon: Icons.fast_forward, enabled: jumpOk, onTap: () => controller.jump(index, 1)),
+          const SizedBox(width: 6),
+          _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
+          const SizedBox(width: 6),
+          _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+          const SizedBox(width: 6),
+          _railChip(label: 'KEY', lit: d.keylock, onTap: () => controller.setKeylock(index, !d.keylock)),
+        ],
+      ),
+    );
+    final rows = <Widget>[
+      SizedBox(height: WaveformPainter.overviewH, child: overview),
+      info,
+      readouts,
+      perf,
+      transport,
+      const SizedBox(height: 2),
+      Expanded(child: detail),
+    ];
+    Widget body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _hang ? rows.reversed.toList() : rows,
+    );
+    if (!d.loaded) {
+      body = GestureDetector(behavior: HitTestBehavior.opaque, onTap: onLoad, child: body);
+    }
+    return ColoredBox(color: SideDeckTheme.deckBg, child: body);
+  }
+
+  Widget _deckTag() => Container(
+    width: 18,
+    height: 14,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(color: _tagColor, borderRadius: BorderRadius.circular(2)),
+    child: Text(
+      index == 0 ? 'A' : 'B',
+      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+    ),
+  );
 
   Widget _rail(DeckState d) {
     final tag = Container(
@@ -152,15 +275,16 @@ class DeckPanel extends StatelessWidget {
         // Keep clear of the centre line, so deck B's CUE isn't right against
         // deck A's buttons.
         child: Padding(
-          padding: EdgeInsets.only(top: _hang ? 10 : 2, bottom: _hang ? 2 : 10, right: controller.showTempoFader ? 6 : 0),
+          padding: EdgeInsets.only(
+            top: _hang ? 10 : 2,
+            bottom: _hang ? 2 : 10,
+            right: controller.showTempoFader ? 6 : 0,
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(child: _transport(d)),
-              if (controller.showTempoFader) ...[
-                const SizedBox(width: 6),
-                _tempoColumn(d),
-              ],
+              if (controller.showTempoFader) ...[const SizedBox(width: 6), _tempoColumn(d)],
             ],
           ),
         ),
@@ -179,11 +303,7 @@ class DeckPanel extends StatelessWidget {
       width: 30,
       child: Column(
         children: [
-          _railChip(
-            label: 'KEY',
-            lit: d.keylock,
-            onTap: () => controller.setKeylock(index, !d.keylock),
-          ),
+          _railChip(label: 'KEY', lit: d.keylock, onTap: () => controller.setKeylock(index, !d.keylock)),
           const SizedBox(height: 4),
           Expanded(
             child: TempoFader(
@@ -203,51 +323,37 @@ class DeckPanel extends StatelessWidget {
 
   Widget _transport(DeckState d) {
     return FittedBox(
-            fit: BoxFit.scaleDown,
-            // Two columns: CUE over PLAY, and beside them rbxport's beat-jump
-            // pair, our Q toggle and the jump-size box.
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _cueButton(d),
-                    const SizedBox(height: 12),
-                    _playButton(d),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _railChip(
-                      icon: Icons.fast_rewind,
-                      enabled: d.loaded && d.bpm > 1,
-                      onTap: () => controller.jump(index, -1),
-                    ),
-                    const SizedBox(height: 6),
-                    _railChip(
-                      icon: Icons.fast_forward,
-                      enabled: d.loaded && d.bpm > 1,
-                      onTap: () => controller.jump(index, 1),
-                    ),
-                    const SizedBox(height: 6),
-                    _railChip(
-                      label: 'Q',
-                      lit: d.quantize,
-                      onTap: () => controller.setQuantize(index, !d.quantize),
-                    ),
-                    const SizedBox(height: 6),
-                    _railChip(
-                      label: '${d.jumpBeats}',
-                      onTap: () => controller.cycleJumpSize(index),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      fit: BoxFit.scaleDown,
+      // Two columns: CUE over PLAY, and beside them rbxport's beat-jump
+      // pair, our Q toggle and the jump-size box.
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Column(mainAxisSize: MainAxisSize.min, children: [_cueButton(d), const SizedBox(height: 12), _playButton(d)]),
+          const SizedBox(width: 12),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _railChip(
+                icon: Icons.fast_rewind,
+                enabled: d.loaded && d.bpm > 1,
+                onTap: () => controller.jump(index, -1),
+              ),
+              const SizedBox(height: 6),
+              _railChip(
+                icon: Icons.fast_forward,
+                enabled: d.loaded && d.bpm > 1,
+                onTap: () => controller.jump(index, 1),
+              ),
+              const SizedBox(height: 6),
+              _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+              const SizedBox(height: 6),
+              _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -282,7 +388,10 @@ class DeckPanel extends StatelessWidget {
       ),
       child: icon != null
           ? Icon(icon, size: 15, color: fg)
-          : Text(label!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg)),
+          : Text(
+              label!,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg),
+            ),
     );
     if (!enabled) return face;
     if (onStep != null) return HoldRepeatButton(onStep: onStep, child: face);
@@ -307,9 +416,7 @@ class DeckPanel extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: !d.loaded
-              ? SideDeckTheme.deckOutline
-              : (d.cuePreview ? Colors.black : Colors.white),
+          color: !d.loaded ? SideDeckTheme.deckOutline : (d.cuePreview ? Colors.black : Colors.white),
         ),
       ),
     );
@@ -324,14 +431,10 @@ class DeckPanel extends StatelessWidget {
 
   Widget _playButton(DeckState d) {
     final lit = d.playing;
-    final glyph = !d.loaded
-        ? SideDeckTheme.deckOutline
-        : (lit ? Colors.white : const Color(0xFFB4B4B4));
+    final glyph = !d.loaded ? SideDeckTheme.deckOutline : (lit ? Colors.white : const Color(0xFFB4B4B4));
     return Material(
       color: Colors.black,
-      shape: CircleBorder(
-        side: BorderSide(color: lit ? SideDeckTheme.playLit : SideDeckTheme.playRing, width: 2),
-      ),
+      shape: CircleBorder(side: BorderSide(color: lit ? SideDeckTheme.playLit : SideDeckTheme.playRing, width: 2)),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: d.loaded ? () => controller.playPause(index) : null,
@@ -356,7 +459,7 @@ class DeckPanel extends StatelessWidget {
         ),
       );
     }
-    final controls = gridEditing ? _gridEditor() : _performanceControls(d);
+    final controls = gridEditing ? _gridEditor() : _performanceControls(context, d);
     return Container(
       color: SideDeckTheme.deckRow,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -377,11 +480,7 @@ class DeckPanel extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: _readouts(d),
-            ),
+            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: _readouts(d)),
           ),
           const SizedBox(width: 10),
           ...controls,
@@ -442,20 +541,13 @@ class DeckPanel extends StatelessWidget {
         // Auto gain at work: the level change applied to this track.
         if (controller.autoGain && d.autoGainDb.abs() >= 0.1) ...[
           sep(),
-          _mono(
-            '${d.autoGainDb > 0 ? '+' : '−'}${d.autoGainDb.abs().toStringAsFixed(1)} dB',
-            SideDeckTheme.deckDim,
-          ),
+          _mono('${d.autoGainDb > 0 ? '+' : '−'}${d.autoGainDb.abs().toStringAsFixed(1)} dB', SideDeckTheme.deckDim),
         ],
       ],
     );
   }
 
-  static const _readoutStyle = TextStyle(
-    fontSize: 12.5,
-    fontFeatures: [FontFeature.tabularFigures()],
-    height: 1,
-  );
+  static const _readoutStyle = TextStyle(fontSize: 12.5, fontFeatures: [FontFeature.tabularFigures()], height: 1);
 
   Widget _mono(String s, Color color) => Text(s, style: _readoutStyle.copyWith(color: color));
 
@@ -477,7 +569,19 @@ class DeckPanel extends StatelessWidget {
     );
   }
 
-  List<Widget> _performanceControls(DeckState d) {
+  /// Long-press SYNC: type the exact tempo this deck should play at.
+  Future<void> _enterBpm(BuildContext ctx, DeckState d) async {
+    HapticFeedback.mediumImpact();
+    final bpm = await showBpmPad(
+      ctx,
+      title: 'Deck ${index == 0 ? 'A' : 'B'} tempo',
+      current: d.bpm * d.rate,
+      trackBpm: d.bpm,
+    );
+    if (bpm != null) controller.setBpm(index, bpm);
+  }
+
+  List<Widget> _performanceControls(BuildContext context, DeckState d) {
     final beats = d.loopBars * 4;
     final beatsLabel = (beats - beats.round()).abs() < 0.05 ? '${beats.round()}' : beats.toStringAsFixed(1);
     final canHalf = beats > DjController.loopBeats.first + 0.05;
@@ -487,16 +591,18 @@ class DeckPanel extends StatelessWidget {
     const gap = SizedBox(width: 3);
     const groupGap = SizedBox(width: 8);
     return [
-      for (var slot = 0; slot < d.hotCues.length; slot++) ...[
-        if (slot > 0) gap,
-        _HotCuePad(
-          slot: slot,
-          set: d.hotCues[slot] >= 0,
-          onTap: () => controller.hotCue(index, slot),
-          onClear: () => controller.clearHotCue(index, slot),
-        ),
+      if (controller.showHotCues) ...[
+        for (var slot = 0; slot < d.hotCues.length; slot++) ...[
+          if (slot > 0) gap,
+          _HotCuePad(
+            slot: slot,
+            set: d.hotCues[slot] >= 0,
+            onTap: () => controller.hotCue(index, slot),
+            onClear: () => controller.clearHotCue(index, slot),
+          ),
+        ],
+        groupGap,
       ],
-      groupGap,
       _DeckButton(label: '½', enabled: canHalf, onStep: () => controller.halfLoop(index)),
       gap,
       _DeckButton(
@@ -515,8 +621,10 @@ class DeckPanel extends StatelessWidget {
         label: 'SYNC',
         width: 40,
         lit: d.synced,
-        enabled: canSync,
-        onTap: () => controller.sync(index),
+        enabled: canSync || hasBpm,
+        // Tap syncs to the other deck, tap again releases; hold to type a BPM.
+        onTap: canSync || d.synced ? () => controller.toggleSync(index) : null,
+        onLongPress: hasBpm ? () => _enterBpm(context, d) : null,
       ),
       gap,
       _DeckButton(label: '+', enabled: hasBpm, onStep: () => controller.nudgeBpm(index, 0.1)),
@@ -585,12 +693,7 @@ class GridWarningBadge extends StatelessWidget {
 /// button grey, set is filled with a black letter. Tap sets or jumps;
 /// long-press clears.
 class _HotCuePad extends StatelessWidget {
-  const _HotCuePad({
-    required this.slot,
-    required this.set,
-    required this.onTap,
-    required this.onClear,
-  });
+  const _HotCuePad({required this.slot, required this.set, required this.onTap, required this.onClear});
 
   final int slot;
   final bool set;
@@ -614,12 +717,7 @@ class _HotCuePad extends StatelessWidget {
         ),
         child: Text(
           WaveformPainter.hotCueLabel(slot),
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            height: 1,
-            color: set ? Colors.black : colour,
-          ),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: set ? Colors.black : colour),
         ),
       ),
     );
@@ -700,8 +798,10 @@ class _DeckButton extends StatelessWidget {
     this.onTap,
     this.onStep,
     this.onPress,
+    this.onLongPress,
   });
 
+  final VoidCallback? onLongPress;
   final String label;
   final String? sub;
   final double width;
@@ -719,12 +819,27 @@ class _DeckButton extends StatelessWidget {
       content = Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg)),
-          Text(sub!, style: TextStyle(fontSize: 7.5, fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.1, color: lit ? Colors.white : SideDeckTheme.deckDim)),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: fg),
+          ),
+          Text(
+            sub!,
+            style: TextStyle(
+              fontSize: 7.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+              height: 1.1,
+              color: lit ? Colors.white : SideDeckTheme.deckDim,
+            ),
+          ),
         ],
       );
     } else {
-      content = Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: fg));
+      content = Text(
+        label,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: fg),
+      );
     }
     final face = Container(
       width: width,
@@ -741,7 +856,7 @@ class _DeckButton extends StatelessWidget {
     if (onPress != null) {
       return Listener(behavior: HitTestBehavior.opaque, onPointerDown: (_) => onPress!(), child: face);
     }
-    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, child: face);
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap, onLongPress: onLongPress, child: face);
   }
 }
 
@@ -793,11 +908,7 @@ class _TempoFaderState extends State<TempoFader> {
       builder: (context, c) {
         final fader = CustomPaint(
           size: Size(c.maxWidth, c.maxHeight),
-          painter: _TempoFaderPainter(
-            value: widget.value,
-            downIsFaster: widget.downIsFaster,
-            enabled: widget.enabled,
-          ),
+          painter: _TempoFaderPainter(value: widget.value, downIsFaster: widget.downIsFaster, enabled: widget.enabled),
         );
         if (!widget.enabled) return fader;
         return GestureDetector(
@@ -859,7 +970,10 @@ class _TempoFaderPainter extends CustomPainter {
       const Radius.circular(2),
     );
     canvas.drawRRect(body, Paint()..color = SideDeckTheme.deckOutline);
-    canvas.drawRect(Rect.fromCenter(center: Offset(cx, y), width: 14, height: 1.5), Paint()..color = const Color(0xFFD0D0D0));
+    canvas.drawRect(
+      Rect.fromCenter(center: Offset(cx, y), width: 14, height: 1.5),
+      Paint()..color = const Color(0xFFD0D0D0),
+    );
   }
 
   @override

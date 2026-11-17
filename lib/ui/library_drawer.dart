@@ -446,13 +446,20 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
-              child: Row(
-                children: [
+              child: _toolbar(
+                context,
+                tabs: [
                   _tabBtn('Local', 0),
                   _tabBtn('Remote', 1),
                   _tabBtn('USB', 2),
                   _tabBtn('History', 3),
-                  const SizedBox(width: 8),
+                ],
+                close: IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close, size: 22),
+                ),
+                tools: [
                   Expanded(
                     child: SizedBox(
                       height: 36,
@@ -584,11 +591,6 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                       icon: const Icon(Icons.folder_open, size: 22),
                     ),
                   ],
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, size: 22),
-                  ),
                 ],
               ),
             ),
@@ -614,6 +616,38 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Tabs, search and tools on one line when wide; on a narrow (upright)
+  /// screen the tabs get their own line with close, and search and the tools
+  /// go underneath.
+  Widget _toolbar(
+    BuildContext context, {
+    required List<Widget> tabs,
+    required List<Widget> tools,
+    required Widget close,
+  }) {
+    if (MediaQuery.sizeOf(context).width >= 640) {
+      return Row(children: [...tabs, const SizedBox(width: 8), ...tools, close]);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: tabs),
+              ),
+            ),
+            close,
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(children: tools),
+      ],
     );
   }
 

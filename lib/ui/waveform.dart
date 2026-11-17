@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:sidedeck/engine/sections.dart';
 
 /// 3-band DJ waveform after rbxport (https://github.com/chrisle/rbxport,
 /// GPL-2.0-or-later): overview strip plus a scrolling detail with the playhead
@@ -34,6 +35,8 @@ class WaveformPainter extends CustomPainter {
     this.cuePoint = -1,
     this.hotCues = const [],
     this.zoomWindowSec = WaveformView.defaultZoom,
+    this.sections = const [],
+    this.fullWave = false,
   });
 
   final WavePart part;
@@ -56,6 +59,18 @@ class WaveformPainter extends CustomPainter {
   /// Hot cue seconds per slot (A, B, C, ...); negative = empty slot.
   final List<double> hotCues;
   final double zoomWindowSec;
+  /// Intro / breakdown / drop / outro from [detectSections]; empty hides them.
+  final List<TrackSection> sections;
+  /// Detail drawn mirrored round its middle instead of from one edge.
+  final bool fullWave;
+
+  static const sectionColours = <SectionKind, Color>{
+    SectionKind.intro: Color(0xFF5E6B7D),
+    SectionKind.main: Color(0xFF30D26E),
+    SectionKind.drop: Color(0xFFFF376F),
+    SectionKind.breakdown: Color(0xFFAA72FF),
+    SectionKind.outro: Color(0xFF5E6B7D),
+  };
 
   /// rbxport's default "colorful" hot cue colours by slot (src/lib/hotCueColours.ts).
   static const hotCueColours = [
@@ -121,6 +136,22 @@ class WaveformPainter extends CustomPainter {
   void _paintOverview(Canvas canvas, double width, double top) {
     final waveTop = top + 2;
     final base = waveTop + _overviewWaveH;
+    // Sections behind the wave: the bass-less stretches tinted, a line where
+    // the bass comes in.
+    for (var i = 0; i < sections.length; i++) {
+      final s = sections[i];
+      final colour = sectionColours[s.kind]!;
+      final x0 = (s.start / duration * width).clamp(0.0, width);
+      final x1 = (s.end / duration * width).clamp(0.0, width);
+      if (!s.kind.hasBass) {
+        canvas.drawRect(
+          Rect.fromLTRB(x0, waveTop, x1, base),
+          Paint()..color = colour.withValues(alpha: 0.3),
+        );
+      } else if (i > 0) {
+        canvas.drawRect(Rect.fromLTWH(x0 - 1, waveTop, 2, base - waveTop), Paint()..color = colour);
+      }
+    }
     final cols = overview.length ~/ 3;
     if (cols > 0) {
       // Overview means run low on long tracks; scale so the loudest column fills the strip.
@@ -221,6 +252,24 @@ class WaveformPainter extends CustomPainter {
     final bar = whole ~/ 4 + 1;
     final beat = whole % 4 + 1;
     final toPhrase = _phraseBars - (bar - 1) % _phraseBars;
+    // The next section change within 32 bars: "BREAK 7" = in 7 bars.
+    TextSpan? next;
+    for (final s in sections) {
+      if (s.start <= position + 0.01) continue;
+      final barsTo = ((s.start - position) / (240.0 / bpm)).ceil();
+      if (barsTo <= 32) {
+        next = TextSpan(
+          text: '  ${s.kind.label} $barsTo',
+          style: TextStyle(
+            color: sectionColours[s.kind],
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        );
+      }
+      break;
+    }
     final tp = TextPainter(
       text: TextSpan(
         children: [
@@ -241,6 +290,7 @@ class WaveformPainter extends CustomPainter {
               fontWeight: FontWeight.w700,
             ),
           ),
+          ?next,
         ],
       ),
       textDirection: TextDirection.ltr,
@@ -284,6 +334,41 @@ class WaveformPainter extends CustomPainter {
     tp.paint(canvas, badge.center - Offset(tp.width / 2, tp.height / 2));
   }
 
+  /// Section start on the detail: a line in the section's colour and a tag
+  /// on the deck's inner edge (the shared centre line), clear of the cue
+  /// marks and bar counter on the outer edge.
+  void _paintSectionStart(
+    Canvas canvas,
+    double width,
+    double top,
+    double bottom,
+    double x,
+    SectionKind kind,
+  ) {
+    if (x < -60 || x > width + 4) return;
+    final colour = sectionColours[kind]!;
+    canvas.drawRect(Rect.fromLTRB(x - 1, top, x + 1, bottom), Paint()..color = colour);
+    final tp = TextPainter(
+      text: TextSpan(
+        text: kind.label,
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    const padX = 4.0, padY = 2.0;
+    final h = tp.height + padY * 2;
+    final tagTop = hangDown ? top + 2 : bottom - 2 - h;
+    final tag = Rect.fromLTWH(x + 1, tagTop, tp.width + padX * 2, h);
+    canvas.drawRect(tag, Paint()..color = colour);
+    tp.paint(canvas, Offset(tag.left + padX, tag.top + padY));
+  }
+
   /// Cue marker on the detail: a line plus a triangle on the deck's outer
   /// edge (top for deck A, bottom for deck B), pointing into the wave.
   void _paintCue(Canvas canvas, double width, double top, double bottom, double x) {
@@ -314,10 +399,23 @@ class WaveformPainter extends CustomPainter {
     final viewStart = position - viewDur / 2;
     double xForTime(double t) => (t - viewStart) / viewDur * width;
 
-    final full = bottom - top - 1;
-    // Deck A grows up from the bottom edge, deck B hangs down from the top edge.
-    final base = hangDown ? top : bottom;
+    // Half (rbxport): deck A grows up from the bottom edge, deck B hangs down
+    // from the top edge. Full: both mirror round the middle of the detail.
+    final full = fullWave ? (bottom - top) / 2 - 0.5 : bottom - top - 1;
+    final base = fullWave ? (top + bottom) / 2 : (hangDown ? top : bottom);
     final dir = hangDown ? 1.0 : -1.0;
+
+    for (final s in sections) {
+      if (s.kind.hasBass) continue;
+      final x0 = xForTime(s.start).clamp(0.0, width);
+      final x1 = xForTime(s.end).clamp(0.0, width);
+      if (x1 > x0) {
+        canvas.drawRect(
+          Rect.fromLTRB(x0, top, x1, bottom),
+          Paint()..color = sectionColours[s.kind]!.withValues(alpha: 0.16),
+        );
+      }
+    }
 
     final cols = detail.length ~/ 3;
     if (cols > 0) {
@@ -332,9 +430,11 @@ class WaveformPainter extends CustomPainter {
             : _interpolate(t * columnsPerSec, cols);
         if (v.$1 == 0 && v.$2 == 0 && v.$3 == 0) {
           silence.addRect(_span(px, base, dir, 0, 1));
+          if (fullWave) silence.addRect(_span(px, base, -dir, 0, 1));
           continue;
         }
         _addSegments(paths, px, base, dir, full, v.$1, v.$2, v.$3);
+        if (fullWave) _addSegments(paths, px, base, -dir, full, v.$1, v.$2, v.$3);
       }
       canvas.drawPath(silence, Paint()..color = _silence);
       for (final e in paths.entries) {
@@ -354,6 +454,9 @@ class WaveformPainter extends CustomPainter {
     }
 
     _paintGrid(canvas, width, top, bottom, viewStart, viewDur, xForTime);
+    for (var i = 1; i < sections.length; i++) {
+      _paintSectionStart(canvas, width, top, bottom, xForTime(sections[i].start), sections[i].kind);
+    }
     for (var i = 0; i < hotCues.length; i++) {
       if (hotCues[i] >= 0) _paintHotCue(canvas, width, top, bottom, xForTime(hotCues[i]), i);
     }
@@ -490,7 +593,9 @@ class WaveformPainter extends CustomPainter {
         oldDelegate.loopEnd != loopEnd ||
         oldDelegate.cuePoint != cuePoint ||
         !listEquals(oldDelegate.hotCues, hotCues) ||
-        oldDelegate.zoomWindowSec != zoomWindowSec;
+        oldDelegate.zoomWindowSec != zoomWindowSec ||
+        oldDelegate.fullWave != fullWave ||
+        !identical(oldDelegate.sections, sections);
   }
 }
 
@@ -512,6 +617,8 @@ class WaveformView extends StatefulWidget {
     this.loopEnd = 0,
     this.cuePoint = -1,
     this.hotCues = const [],
+    this.sections = const [],
+    this.fullWave = false,
     this.playing = false,
     this.zoom = defaultZoom,
     this.onOverviewSeek,
@@ -534,6 +641,9 @@ class WaveformView extends StatefulWidget {
   final double loopEnd;
   final double cuePoint;
   final List<double> hotCues;
+  final List<TrackSection> sections;
+  /// Detail drawn mirrored round its middle instead of from one edge.
+  final bool fullWave;
   /// While true the view animates [position] forward between updates.
   final bool playing;
   /// Heard seconds across the detail; see [defaultZoom], [minZoom], [maxZoom].
@@ -660,6 +770,8 @@ class _WaveformViewState extends State<WaveformView> with SingleTickerProviderSt
             cuePoint: w0.cuePoint,
             hotCues: w0.hotCues,
             zoomWindowSec: w0.zoom,
+            sections: w0.sections,
+            fullWave: w0.fullWave,
           ),
           size: Size(w, h),
         );

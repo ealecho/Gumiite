@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/analysis_cache.dart';
 import 'package:sidedeck/engine/cue_store.dart';
@@ -89,6 +90,7 @@ class DjController extends ChangeNotifier {
     _loadShowFilter();
     _loadHistory();
     _loadTempoPrefs();
+    _loadScreenPrefs();
   }
 
   // Tempo fader and key lock, per deck, after the CDJ's TEMPO range and
@@ -106,6 +108,63 @@ class DjController extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('show_tempo_fader', on);
+  }
+
+  /// Intro / breakdown / drop / outro marks on the waveforms.
+  bool showSections = true;
+
+  Future<void> setShowSections(bool on) async {
+    showSections = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_sections', on);
+  }
+
+  /// Scrolling waveforms mirrored round their middle; off, deck A grows up
+  /// and deck B hangs down from the shared centre line (rbxport).
+  bool fullWaveform = false;
+
+  Future<void> setFullWaveform(bool on) async {
+    fullWaveform = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('full_waveform', on);
+  }
+
+  /// The A–D hot cue pads in each deck's control row. Hidden, set cues keep
+  /// their marks on the waveforms.
+  bool showHotCues = true;
+
+  Future<void> setShowHotCues(bool on) async {
+    showHotCues = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_hot_cues', on);
+  }
+
+  /// Settings → Screen: 0 follows the phone (and its rotation lock),
+  /// 1 landscape only, 2 portrait only.
+  int screenOrientation = 0;
+
+  static const _orientations = [
+    DeviceOrientation.values,
+    [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+    [DeviceOrientation.portraitUp],
+  ];
+
+  Future<void> setScreenOrientation(int mode) async {
+    screenOrientation = mode.clamp(0, 2);
+    await SystemChrome.setPreferredOrientations(_orientations[screenOrientation]);
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('screen_orientation', screenOrientation);
+  }
+
+  Future<void> _loadScreenPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    screenOrientation = (prefs.getInt('screen_orientation') ?? 0).clamp(0, 2);
+    await SystemChrome.setPreferredOrientations(_orientations[screenOrientation]);
+    notifyListeners();
   }
 
   /// Key lock on both decks, for the Settings switch.
@@ -127,6 +186,9 @@ class DjController extends ChangeNotifier {
     }
     tempoDownFaster = prefs.getBool('tempo_down_faster') ?? true;
     showTempoFader = prefs.getBool('show_tempo_fader') ?? false;
+    showSections = prefs.getBool('show_sections') ?? true;
+    fullWaveform = prefs.getBool('full_waveform') ?? false;
+    showHotCues = prefs.getBool('show_hot_cues') ?? true;
     notifyListeners();
   }
 
@@ -930,6 +992,30 @@ class DjController extends ChangeNotifier {
     deck(masterIdx).synced = false;
     _applySlaveTempo(slave);
     if (deck(slave).playing && deck(masterIdx).playing) _alignPhase(slave);
+    notifyListeners();
+  }
+
+  /// SYNC button: a second press releases sync and keeps the tempo it had.
+  void toggleSync(int deckIndex) {
+    final d = deck(deckIndex);
+    if (d.synced) {
+      d.synced = false;
+      notifyListeners();
+    } else {
+      sync(deckIndex);
+    }
+  }
+
+  /// Set the heard tempo to an exact [heardBpm] (releases sync). Limited to
+  /// half to double the track's own BPM, as the engine plays.
+  void setBpm(int deckIndex, double heardBpm) {
+    final d = deck(deckIndex);
+    if (!d.loaded || d.bpm <= 1 || heardBpm <= 0) return;
+    d.rate = (heardBpm / d.bpm).clamp(0.5, 2.0);
+    d.synced = false;
+    _nudgeBend[deckIndex] = 0;
+    _applyRate(deckIndex);
+    _followMasterBpm(deckIndex);
     notifyListeners();
   }
 

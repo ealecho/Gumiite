@@ -138,6 +138,86 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const Divider(height: 32),
           const Text(
+            'Screen',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Upright, the decks stack with their buttons on the outside and the '
+            'waveforms meeting in the middle. Auto turns with the phone and keeps to '
+            'its rotation lock.',
+            style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 0, label: Text('Auto'), icon: Icon(Icons.screen_rotation)),
+              ButtonSegment(value: 1, label: Text('Landscape'), icon: Icon(Icons.stay_current_landscape)),
+              ButtonSegment(value: 2, label: Text('Portrait'), icon: Icon(Icons.stay_current_portrait)),
+            ],
+            selected: {widget.dj.screenOrientation},
+            showSelectedIcon: false,
+            onSelectionChanged: (s) async {
+              await widget.dj.setScreenOrientation(s.first);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
+            'Deck buttons',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Hot cue pads (A–D)'),
+            subtitle: const Text(
+              'The four hot cue buttons on each deck. Off gives the row more room; '
+              'cues already set still show on the waveforms.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showHotCues,
+            onChanged: (v) async {
+              await widget.dj.setShowHotCues(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
+            'Waveform',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Full waveform'),
+            subtitle: const Text(
+              'Both decks\' scrolling waveforms drawn full, mirrored round their middle. '
+              'Off: half waveforms, deck A rising and deck B hanging from the centre line.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.fullWaveform,
+            onChanged: (v) async {
+              await widget.dj.setFullWaveform(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Track sections'),
+            subtitle: const Text(
+              'INTRO, BREAK, DROP and OUTRO marked on the waveforms, found from where '
+              'the bass drops out and comes back. The bar counter counts down to the '
+              'next one. Follows the beat grid, so fix the grid first if they look off.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showSections,
+            onChanged: (v) async {
+              await widget.dj.setShowSections(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 32),
+          const Text(
             'Tempo',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
