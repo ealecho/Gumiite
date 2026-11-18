@@ -35,7 +35,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![Settings: Screen (auto, landscape or portrait) and Deck buttons (hot cue pads, Auto Cue)](screenshots/settings.png)
 
-![The restyled internal mixer: EQ faders and crossfader (the filter fader is optional)](screenshots/mixer.png)
+![The internal mixer: EQ faders and crossfader in recessed wells with tick marks and shaded caps (the filter fader is optional)](screenshots/mixer.png)
 
 ![GRID mode on deck A (beat here, bar here, 5 ms, BPM, tap, undo) with the internal mixer hidden](screenshots/grid.png)
 
@@ -100,7 +100,9 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
 
 - **Control row** between each overview and detail: title and artist, then
   `-MM:SS.t` remaining, `MM:SS.t` elapsed, BPM (0.01), tempo %, key; hot cue pads;
-  `½ · LOOP · ×2`; `− · SYNC · +`; `GRID`. Flat rbxport-style buttons that light blue.
+  `‹ 4 ›` (the loop length in a recessed readout between halve and double);
+  `− · SYNC · +`; `GRID`. Buttons are raised and lit from above, and glow blue
+  when on; set hot cues shade in their slot colour.
 - **Transport rail,** in two columns: CUE over PLAY, and beside them beat-jump
   ◀◀ ▶▶, **Q** (quantize) and the jump size; small A/B tags; library (deck A)
   and settings (deck B). A gap at the centre line keeps deck B's CUE clear of
@@ -160,8 +162,8 @@ the camera cutout.
 
 ### Mixer
 
-Restyled after rbxport's neutral mixer: flat faders on thin rails with a centre
-notch, and a blue fill from the centre so any EQ, filter or crossfader move away
+Restyled after rbxport's neutral mixer: each fader sits in a recessed well with
+tick marks, on a dark rail with a centre notch and a shaded cap, and a blue fill from the centre so any EQ, filter or crossfader move away
 from flat is visible. Double-tap a fader to reset it (EQ flat, filter off,
 crossfader centred). In external mixer mode the strip is hidden and the decks
 use the whole screen.
@@ -326,7 +328,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | ◀◀ ▶▶ and size box | Rail | Beat jump; tap the box for 1–32 beats |
 | Q | Rail | Quantize on / off |
 | A B C D | Control row | Hot cues: tap set or jump, long-press clear |
-| ½ · LOOP · ×2 | Control row | Halve, toggle, double the loop |
+| ‹ 4 › | Control row | Halve the loop, toggle it (the number lights blue), double it |
 | − · SYNC · + | Control row | BPM ±0.1; beat sync (tap again to release, long-press to type a BPM) |
 | Double-tap a fader | Mixer | Reset EQ / filter / crossfader to centre |
 | KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
@@ -380,7 +382,7 @@ engine is compiled by CMake during the Xcode build.
 - Internal mixer: 3-band EQ, filter, crossfader
 - BPM / key analysis on load (cached in SQLite); Camelot or musical key labels
 - Beat detector: Queen Mary TempoTrackV2 + Mixxx BeatUtils, refined on kick attacks and checked for drift; key: Queen Mary GetKeyMode
-- Beat sync, loops (½ / ×2), BPM ±0.1, nudge, quantize, beat jump
+- Beat sync, loops (‹ halve / › double), BPM ±0.1, nudge, quantize, beat jump
 - CUE and hot cues A–D, saved per track; waveform scrubbing; pinch zoom
 - GRID mode fixes the beatgrid (beat here, bar here, BPM edit, tap tempo, undo); "check grid" warning
 - rekordbox USB import (tracks, playlists, grids, cues) - untested on a real stick
