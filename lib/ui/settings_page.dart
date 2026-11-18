@@ -8,6 +8,7 @@ import 'package:sidedeck/engine/usb_output.dart';
 import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/subsonic/subsonic_client.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
+import 'package:sidedeck/ui/midi_test_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.dj});
@@ -178,6 +179,20 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
               ),
               onTap: _inputTesting ? null : _testUsbInput,
+            ),
+          if (kDebugMode && Platform.isAndroid)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.piano_outlined),
+              title: const Text('Test MIDI input'),
+              subtitle: const Text(
+                'Debug: shows every MIDI message the mixer sends as you press its buttons '
+                'and turn its knobs (K.O.: USB mode Multi, MIDI on).',
+                style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+              ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const MidiTestPage()),
+              ),
             ),
           const Divider(height: 32),
           const Text(

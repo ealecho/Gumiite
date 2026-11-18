@@ -89,6 +89,10 @@ waveform; tap REC again to stop.
 - Debug builds have **Settings → External mixer → Test USB input (1 min)**,
   which records every input channel and shows each one's level, for checking
   what another mixer sends back.
+- Debug builds also have **Settings → External mixer → Test MIDI input**, which
+  lists every MIDI message a USB mixer sends. The EP-136 K.O. (firmware 1.0.3)
+  sends its controls only in MIDI Control mode, where its mixer effects are off;
+  in Multi mode it receives MIDI but sends none.
 
 ### External mixer (USB) fix
 

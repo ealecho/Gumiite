@@ -7,6 +7,8 @@
     <!-- Recording a USB mixer's return (its mix) needs it. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <!-- Reading a USB mixer's knobs and buttons (MIDI). -->
+    <uses-feature android:name="android.software.midi" android:required="false" />
 
     <application
         android:label="SideDeck"

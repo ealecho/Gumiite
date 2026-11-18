@@ -146,6 +146,8 @@ class MainActivity : FlutterActivity() {
         val stick = StickAccess(this)
         stickAccess = stick
         MethodChannel(messenger, "sidedeck/stick").setMethodCallHandler(stick)
+        // Debug: stream what a USB MIDI device (the K.O.'s knobs/buttons) sends.
+        EventChannel(messenger, "sidedeck/midi").setStreamHandler(MidiMonitor(this))
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
