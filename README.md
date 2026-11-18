@@ -47,7 +47,8 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 | Area | Change |
 |---|---|
-| External mixer | Fixed silent playback on Samsung/Qualcomm phones; decks take the full screen in external mode |
+| External mixer | Fixed silent playback on Samsung/Qualcomm phones; decks take the full screen in external mode; output limiter instead of a hard clip |
+| Recording | REC records the USB mixer's own mix (its effects included) to a WAV in Music/SideDeck |
 | Waveforms | rbxport-style 3-band waveforms, mirrored at a shared centre line; pinch zoom; smooth motion |
 | Deck controls | New control row and two-column transport rail, CUE, hot cues A–D, quantize, beat jump, on-wave nudge; tap the title for track details |
 | Navigation | Drag the waveform to scrub; bar / phrase counter; track sections (intro, break, drop, outro) with a countdown |
@@ -61,6 +62,31 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | Library | Clean layout: top bar with search and a ⋮ tools menu, count / total time / sort line, rows with a ⋮ load menu, tabs along the bottom; key display setting; played marks and a History tab with time played; rekordbox USB import (untested on a real stick) |
 
 Details of each are below.
+
+### Recording a set (REC)
+
+With the external mixer on, **REC** on deck B records the mix the USB mixer
+sends back to the phone: both decks after its EQ, faders, crossfader and
+effects, as you hear them. The time shows in red at the top right of deck A's
+waveform; tap REC again to stop.
+
+- The EP-136 K.O. offers 8 USB input channels in Multi mode and sends its
+  stereo mix on 1–2 (3–8 are silent). It sends it quiet, ~25 dB down, so the
+  take is recorded as 32-bit float and on stop raised to a -1 dBFS peak (at
+  most +36 dB; nothing compressed or clipped), then saved as a 16-bit stereo
+  WAV, `SideDeck mix <date time>.wav`, in **Music/SideDeck** (Files app).
+  About 11 MB a minute; it needs 1 GB free to start.
+- Pulling the cable stops and saves; a take cut off by a crash or a killed app
+  is saved on the next start. Keep SideDeck on screen while recording
+  (Android pauses background microphone use). The first REC asks for the
+  record-audio permission.
+- The recorder runs below playback priority with a 2 s buffer and writes on
+  its own thread, so recording never disturbs the decks.
+- Each deck's USB output now has a -0.3 dBFS peak limiter instead of a hard
+  clip at full scale, and the output thread runs at audio priority.
+- Debug builds have **Settings → External mixer → Test USB input (1 min)**,
+  which records every input channel and shows each one's level, for checking
+  what another mixer sends back.
 
 ### External mixer (USB) fix
 
@@ -339,6 +365,7 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
 | GRID | Control row (when turned on) | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
+| REC | Deck B, by settings | Record the USB mixer's mix (external mixer on); time on deck A |
 | Tap a track (or its ⋮) | Library | Load on deck A / B, analyze |
 | ⋮ (top right) | Library | The tab's tools: add music, analyze, import USB, clear history |
 | USB tab | Library | Import a rekordbox stick (⋮), pick a playlist |
@@ -403,7 +430,8 @@ Keylock (pitch-held tempo) is on by default.
 Turn on **Use external mixer** in Settings with a USB mixer plugged in. Deck A
 goes out on channels 1–2 and Deck B on channels 3–4 so you mix and cue on the
 hardware. The on-screen EQ and crossfader hide in this mode and the decks take
-the whole screen; the connected device is shown in Settings.
+the whole screen; the connected device is shown in Settings. **REC** on deck B
+records the mixer's own mix back to the phone (see Recording a set).
 
 Works with USB mixers that take two stereo decks this way, including the
 Teenage Engineering EP-136 K.O. Sidekick (set USB mode to **Multi**, not

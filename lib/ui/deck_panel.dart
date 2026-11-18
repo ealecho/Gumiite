@@ -287,7 +287,7 @@ class DeckPanel extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: saving ? null : controller.toggleRecording,
         child: Container(
-          width: 52,
+          width: 48,
           height: 28,
           alignment: Alignment.center,
           decoration: rec ? SideDeckTheme.raised(tint: _recRed) : SideDeckTheme.raised(),
@@ -358,9 +358,9 @@ class DeckPanel extends StatelessWidget {
           children: [
             tag,
             if (index == 1) ...[
-              const SizedBox(width: 6),
-              Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _recButton())),
               const SizedBox(width: 4),
+              Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _recButton())),
+              const SizedBox(width: 2),
             ],
             const Spacer(),
             tool,
