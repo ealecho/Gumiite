@@ -33,11 +33,11 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 <img src="screenshots/portrait.png" alt="The upright layout: deck A above, deck B below, controls on the outside and the two scrolling waveforms meeting in the middle; deck A is in a tinted breakdown with the bar counter counting down to the drop" width="300"> <img src="screenshots/bpm.png" alt="Long-press SYNC: the in-app BPM keypad, upright" width="300">
 
-![Settings: Screen (auto, landscape or portrait) and Deck buttons (hot cue pads, Auto Cue)](screenshots/settings.png)
+![Settings: Screen (auto, landscape or portrait) and Deck buttons (hot cue pads, GRID and Q buttons, Auto Cue)](screenshots/settings.png)
 
 ![The internal mixer: EQ faders and crossfader in recessed wells with tick marks and shaded caps (the filter fader is optional)](screenshots/mixer.png)
 
-![GRID mode on deck A (beat here, bar here, 5 ms, BPM, tap, undo) with the internal mixer hidden](screenshots/grid.png)
+![GRID mode on deck A, with the GRID button turned on in Settings (beat here, bar here, 5 ms, BPM, tap, undo) with the internal mixer hidden](screenshots/grid.png)
 
 ![Track details, opened by tapping a deck's title](screenshots/details.png)
 
@@ -101,10 +101,10 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
 - **Control row** between each overview and detail: title and artist, then
   `-MM:SS.t` remaining, `MM:SS.t` elapsed, BPM (0.01), tempo %, key; hot cue pads;
   `‹ 4 ›` (the loop length in a recessed readout between halve and double);
-  `− · SYNC · +`; `GRID`. Buttons are raised and lit from above, and glow blue
+  `− · SYNC · +`; `GRID` (when turned on). Buttons are raised and lit from above, and glow blue
   when on; set hot cues shade in their slot colour.
 - **Transport rail,** in two columns: CUE over PLAY, and beside them beat-jump
-  ◀◀ ▶▶, **Q** (quantize) and the jump size; small A/B tags; library (deck A)
+  ◀◀ ▶▶, the jump size and **Q** (quantize, when turned on); small A/B tags; library (deck A)
   and settings (deck B). A gap at the centre line keeps deck B's CUE clear of
   deck A.
 - **Track details:** tap a deck's title for artist, album (rekordbox), length
@@ -156,8 +156,10 @@ the camera cutout.
   silence, as on a CDJ. Without a grid it cues the first sound.
 - **Hot cue pads** can be hidden (Settings → Deck buttons) to give the control
   row room; set cues still show on the waveforms.
-- **Quantize (Q, on by default):** CUE, new hot cues and loop-in snap to the
-  nearest beat, and hot cue jumps while playing keep the beat phase.
+- **Quantize (on by default):** CUE, new hot cues and loop-in snap to the
+  nearest beat, and hot cue jumps while playing keep the beat phase. The **Q**
+  button to switch it is hidden by default (Settings → Deck buttons); hidden,
+  quantize keeps its setting.
 - **Beat jump:** ◀◀ ▶▶ by 1, 2, 4, 8, 16 or 32 beats (tap the size box to cycle).
 
 ### Mixer
@@ -245,7 +247,9 @@ Grids analyzed by an older build keep their old values until re-analyzed
 
 ### Fixing a grid by hand (GRID mode)
 
-Tap **GRID** on a deck. The wave still scrubs and zooms, so put a kick under
+Grid fixing is set-prep work, so the **GRID** button is hidden by default:
+turn it on in Settings → Deck buttons (turning it off leaves GRID mode). Tap
+**GRID** on a deck. The wave still scrubs and zooms, so put a kick under
 the playhead first:
 
 | Button | What it does |
@@ -298,7 +302,8 @@ cue colours and comments. It has only been tested on synthetic files so far.
 - **Auto gain** (Settings): on or off.
 - **Tempo** (Settings): key lock, the tempo fader, and its direction.
 - **Screen** (Settings): auto, landscape or portrait.
-- **Deck buttons** (Settings): hot cue pads, Auto Cue.
+- **Deck buttons** (Settings): hot cue pads, the GRID and Q buttons (both off
+  by default), Auto Cue.
 - **Waveform** (Settings): full waveform, track sections.
 - **Search fix:** the filter could stay active after a search while the box
   looked empty, so other tracks could not be picked. The box now shows the
@@ -326,13 +331,13 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | Tap the title | Control row | Track details |
 | CUE | Rail | Set / return / preview (CDJ style) |
 | ◀◀ ▶▶ and size box | Rail | Beat jump; tap the box for 1–32 beats |
-| Q | Rail | Quantize on / off |
+| Q | Rail (when turned on) | Quantize on / off |
 | A B C D | Control row | Hot cues: tap set or jump, long-press clear |
 | ‹ 4 › | Control row | Halve the loop, toggle it (the number lights blue), double it |
 | − · SYNC · + | Control row | BPM ±0.1; beat sync (tap again to release, long-press to type a BPM) |
 | Double-tap a fader | Mixer | Reset EQ / filter / crossfader to centre |
 | KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
-| GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
+| GRID | Control row (when turned on) | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
 | Tap a track (or its ⋮) | Library | Load on deck A / B, analyze |
 | ⋮ (top right) | Library | The tab's tools: add music, analyze, import USB, clear history |
