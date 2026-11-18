@@ -29,7 +29,9 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 > changes listed under [What this fork adds](#what-this-fork-adds). Build from
 > this branch to get them.
 
-![Two synced decks with the internal mixer hidden and full waveforms: track sections tinted on the overviews (breakdowns in purple), bar / phrase counters with a section countdown (MAIN 8), auto gain beside the key, Auto Cue parking deck B on its first beat, and two-column transport rails](screenshots/decks.png)
+![Two decks loaded with the external mixer on: full waveforms, track sections on the overviews, bar / phrase counters with a section countdown, auto gain beside the key, the ‹ 4 › loop and REC on deck B](screenshots/decks.png)
+
+![Recording a set: REC lit on deck B, the time in red at the top right of deck A's waveform](screenshots/recording.png)
 
 <img src="screenshots/portrait.png" alt="The upright layout: deck A above, deck B below, controls on the outside and the two scrolling waveforms meeting in the middle; deck A is in a tinted breakdown with the bar counter counting down to the drop" width="300"> <img src="screenshots/bpm.png" alt="Long-press SYNC: the in-app BPM keypad, upright" width="300">
 
