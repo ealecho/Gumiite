@@ -432,9 +432,22 @@ class DjController extends ChangeNotifier {
   void _onUsbEvent(UsbHotplugEvent event) {
     if (event.attached) {
       _onUsbAttached(event);
-    } else {
+    } else if (event.playbackStopped) {
+      _onUsbPlaybackStopped(event);
+    } else if (event.detached) {
       _onUsbDetached(event);
     }
+  }
+
+  void _onUsbPlaybackStopped(UsbHotplugEvent event) {
+    if (!externalMixer) return;
+    final name = UsbOutput.deviceLabel(
+      usbDeviceName.isEmpty ? event.name : usbDeviceName,
+    );
+    setExternalMixer(false).then((_) {
+      engineError = 'USB audio to $name stopped; audio is back on the phone.';
+      notifyListeners();
+    });
   }
 
   void _onUsbAttached(UsbHotplugEvent event) {
@@ -616,7 +629,14 @@ class DjController extends ChangeNotifier {
     loadingDeck = null;
     loadingTitle = null;
     loadingPath = null;
-    _followMasterBpm(deckIndex);
+    // If the other deck is synced to us and currently sounding, do not yank
+    // its tempo to this new file. Hand tempo authority to the sounding deck.
+    final other = 1 - deckIndex;
+    if (deck(other).synced && deck(other).playing) {
+      deck(other).synced = false;
+    } else {
+      _followMasterBpm(deckIndex);
+    }
     notifyListeners();
     return true;
   }
