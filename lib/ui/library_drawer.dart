@@ -360,7 +360,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           padding: EdgeInsets.all(24),
           child: Text(
             'Plug in a USB stick exported from rekordbox (through a USB-C hub),\n'
-            'tap the USB icon and pick the stick. Its tracks, playlists, beat grids\n'
+            'open ⋮ → Import a rekordbox USB, pick the stick. Its tracks, playlists, beat grids\n'
             'and cues come in; the grids and cues you set in rekordbox are kept.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SideDeckTheme.muted),
@@ -368,6 +368,32 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         ),
       );
     }
+    final tracks = _stickVisible();
+    final busy = widget.dj.loadingDeck != null || _stickBusy;
+    return ListView.builder(
+      itemCount: tracks.length,
+      itemBuilder: (context, i) {
+        final t = tracks[i];
+        return _songRow(
+          // The grid and cues come from rekordbox: nothing to analyze.
+          analyzeLabel: '',
+          title: t.title,
+          artist: t.artist,
+          bpm: t.bpm > 0 ? t.bpm : null,
+          key: t.key >= 0 ? t.key : null,
+          gridUnsure: t.gridConfidence >= 0 && t.gridConfidence < TrackAnalysis.unsureBelow,
+          played: widget.dj.playedPaths.contains(t.path),
+          durationSec: t.durationSec.toDouble(),
+          working: widget.dj.loadingPath == t.path,
+          onLoad: busy ? null : (deck) => _loadStickTrack(t, deck),
+        );
+      },
+    );
+  }
+
+  /// The USB tab's tracks: the picked playlist in its own order, or all
+  /// tracks by the sort menu, filtered by the search box.
+  List<StickTrack> _stickVisible() {
     var tracks = _stick;
     final playlist = _stickPlaylist;
     if (playlist != null) {
@@ -381,35 +407,10 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           .where((t) => t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q))
           .toList();
     }
-    // A playlist keeps its own order; "all tracks" follows the sort menu.
     if (playlist == null) {
       tracks = _sorted(tracks, (t) => (title: t.title, artist: t.artist, bpm: t.bpm, key: t.key));
     }
-    final busy = widget.dj.loadingDeck != null || _stickBusy;
-    return ListView.builder(
-      itemCount: tracks.length,
-      itemBuilder: (context, i) {
-        final t = tracks[i];
-        final loadingThis = widget.dj.loadingPath == t.path;
-        return _songRow(
-          busyThis: false,
-          analyzeTooltip: 'Grid and cues from rekordbox',
-          onAnalyze: null,
-          title: t.title,
-          artist: t.artist,
-          bpm: t.bpm > 0 ? t.bpm : null,
-          key: t.key >= 0 ? t.key : null,
-          gridUnsure: t.gridConfidence >= 0 && t.gridConfidence < TrackAnalysis.unsureBelow,
-          played: widget.dj.playedPaths.contains(t.path),
-          durationSec: t.durationSec.toDouble(),
-          actions: [
-            _deckBtn('A', busy ? null : () => _loadStickTrack(t, 0), loadingThis && widget.dj.loadingDeck == 0),
-            const SizedBox(width: 8),
-            _deckBtn('B', busy ? null : () => _loadStickTrack(t, 1), loadingThis && widget.dj.loadingDeck == 1),
-          ],
-        );
-      },
-    );
+    return tracks;
   }
 
   Future<void> _loadLocal(LibraryTrack t, int deck) async {
@@ -429,6 +430,39 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     }
   }
 
+  // Clean library layout: a top bar (close, title, search, a ⋮ menu with the
+  // tab's tools), a line with the count, total time and sort, plain song
+  // rows whose ⋮ (or a tap on the row) loads them, and the tabs along the
+  // bottom.
+  static const _tabs = [
+    (Icons.library_music, 'Local'),
+    (Icons.cloud_outlined, 'Remote'),
+    (Icons.usb, 'USB'),
+    (Icons.history, 'History'),
+  ];
+
+  bool _searchOpen = false;
+
+  void _selectTab(int i) {
+    setState(() => _tab = i);
+    // One box serves every tab; back on Local it must show the filter that is
+    // actually applied.
+    if (i == 0 && _search.text != widget.library.query) {
+      _search.text = widget.library.query;
+    }
+    if (i == 1 && _client != null && !_searching && _openPlaylist == null && _playlists.isEmpty) {
+      _loadPlaylists();
+    }
+  }
+
+  void _closeSearch() {
+    setState(() => _searchOpen = false);
+    if (_search.text.isNotEmpty) {
+      _search.clear();
+      _onSearchChanged('');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracks = _sorted(
@@ -444,165 +478,17 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         right: false,
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
-              child: _toolbar(
-                context,
-                tabs: [
-                  _tabBtn('Local', 0),
-                  _tabBtn('Remote', 1),
-                  _tabBtn('USB', 2),
-                  _tabBtn('History', 3),
-                ],
-                close: IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, size: 22),
-                ),
-                tools: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 36,
-                      child: TextField(
-                        controller: _search,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: InputDecoration(
-                          hintText: _tab == 1 ? 'Search server, or browse playlists' : 'Filter…',
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _search,
-                            builder: (context, value, _) => value.text.isEmpty
-                                ? const SizedBox.shrink()
-                                : IconButton(
-                                    tooltip: 'Clear',
-                                    icon: const Icon(Icons.close, size: 16),
-                                    padding: EdgeInsets.zero,
-                                    onPressed: () {
-                                      _search.clear();
-                                      _onSearchChanged('');
-                                    },
-                                  ),
-                          ),
-                          suffixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onChanged: _onSearchChanged,
-                        onSubmitted: (v) {
-                          if (_tab == 1) _searchRemote(v);
-                        },
-                      ),
-                    ),
-                  ),
-                  if (_tab == 3)
-                    IconButton(
-                      tooltip: 'Clear history',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: widget.dj.history.isEmpty ? null : _confirmClearHistory,
-                      icon: const Icon(Icons.delete_sweep_outlined, size: 22),
-                    )
-                  else
-                  PopupMenuButton<TrackSort>(
-                    tooltip: 'Sort',
-                    padding: EdgeInsets.zero,
-                    icon: const Icon(Icons.sort, size: 22),
-                    onSelected: widget.library.setSort,
-                    itemBuilder: (context) => [
-                      _sortItem(TrackSort.name, 'Name'),
-                      _sortItem(TrackSort.bpm, 'BPM'),
-                      _sortItem(TrackSort.key, 'Key'),
-                    ],
-                  ),
-                  if (_tab == 2) ...[
-                    PopupMenuButton<int>(
-                      tooltip: 'Playlist',
-                      enabled: _stickLists.isNotEmpty,
-                      padding: EdgeInsets.zero,
-                      icon: Icon(
-                        Icons.queue_music,
-                        size: 22,
-                        color: _stickPlaylist != null ? SideDeckTheme.deckLit : null,
-                      ),
-                      onSelected: (id) => setState(() => _stickPlaylist = id < 0 ? null : id),
-                      itemBuilder: (context) => [
-                        CheckedPopupMenuItem(value: -1, checked: _stickPlaylist == null, child: const Text('All tracks')),
-                        for (final (id, name) in _stickPlaylistNames())
-                          CheckedPopupMenuItem(value: id, checked: _stickPlaylist == id, child: Text(name)),
-                      ],
-                    ),
-                    IconButton(
-                      tooltip: 'Import a rekordbox USB',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: _stickBusy ? null : _importStick,
-                      icon: const Icon(Icons.usb, size: 22),
-                    ),
-                  ],
-                  if (_tab == 0) ...[
-                    if (lib.analyzing)
-                      IconButton(
-                        tooltip: 'Stop analysis',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: lib.cancelAnalyze,
-                        icon: const Icon(Icons.stop, size: 22),
-                      )
-                    else
-                      PopupMenuButton<String>(
-                        tooltip: 'Analyze BPM / grid',
-                        enabled: lib.tracks.isNotEmpty,
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.graphic_eq, size: 22),
-                        onSelected: (v) async {
-                          if (v == 'missing') {
-                            await _reloadAnalyzedDecks(await lib.analyzeMissing());
-                          } else if (v == 'all') {
-                            await _reloadAnalyzedDecks(await lib.analyzeAll());
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'missing',
-                            enabled: lib.unanalyzedCount > 0,
-                            child: Text(
-                              lib.unanalyzedCount > 0
-                                  ? 'Analyze missing (${lib.unanalyzedCount})'
-                                  : 'Analyze missing',
-                            ),
-                          ),
-                          const PopupMenuItem(
-                            value: 'all',
-                            child: Text('Re-analyze all'),
-                          ),
-                        ],
-                      ),
-                    IconButton(
-                      tooltip: 'Pick files',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: lib.loading || lib.analyzing ? null : lib.pickFiles,
-                      icon: const Icon(Icons.audio_file, size: 22),
-                    ),
-                    IconButton(
-                      tooltip: 'Pick folder',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: lib.loading || lib.analyzing ? null : lib.pickFolder,
-                      icon: const Icon(Icons.folder_open, size: 22),
-                    ),
-                  ],
-                ],
-              ),
-            ),
+            _topBar(lib),
+            _infoLine(tracks),
+            const Divider(height: 1, color: SideDeckTheme.panelAlt),
             if (lib.analyzing || widget.dj.loadingDeck != null || lib.error != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
                 child: _statusLine(lib),
               ),
-            if (_tab == 1 && _openPlaylist != null) _playlistHeader(),
             if (_tab == 2 && _stickStatus != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
                 child: Text(_stickStatus!, style: const TextStyle(fontSize: 12, color: SideDeckTheme.muted)),
               ),
             Expanded(
@@ -613,41 +499,296 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                 _ => _historyList(),
               },
             ),
+            _bottomNav(),
           ],
         ),
       ),
     );
   }
 
-  /// Tabs, search and tools on one line when wide; on a narrow (upright)
-  /// screen the tabs get their own line with close, and search and the tools
-  /// go underneath.
-  Widget _toolbar(
-    BuildContext context, {
-    required List<Widget> tabs,
-    required List<Widget> tools,
-    required Widget close,
-  }) {
-    if (MediaQuery.sizeOf(context).width >= 640) {
-      return Row(children: [...tabs, const SizedBox(width: 8), ...tools, close]);
-    }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: tabs),
-              ),
+  String get _title => switch (_tab) {
+    0 => 'Local',
+    1 => _openPlaylist?.name ?? (_searching ? 'Search' : 'Playlists'),
+    2 => 'rekordbox USB',
+    _ => 'History',
+  };
+
+  Widget _topBar(LibraryController lib) {
+    final searching = _searchOpen || _search.text.isNotEmpty;
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Close',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+          ),
+          if (_tab == 1 && _openPlaylist != null && !searching)
+            IconButton(
+              tooltip: 'Playlists',
+              onPressed: _loadPlaylists,
+              icon: const Icon(Icons.arrow_back),
             ),
-            close,
+          const SizedBox(width: 4),
+          Expanded(
+            child: searching
+                ? TextField(
+                    controller: _search,
+                    autofocus: _searchOpen,
+                    style: const TextStyle(fontSize: 16),
+                    textInputAction: TextInputAction.search,
+                    decoration: InputDecoration(
+                      hintText: _tab == 1 ? 'Search the server' : 'Search',
+                      border: InputBorder.none,
+                      isDense: true,
+                    ),
+                    onChanged: _onSearchChanged,
+                    onSubmitted: (v) {
+                      if (_tab == 1) _searchRemote(v);
+                    },
+                  )
+                : Text(
+                    _title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w600),
+                  ),
+          ),
+          if (_tab == 0 && lib.analyzing)
+            IconButton(
+              tooltip: 'Stop analysis',
+              onPressed: lib.cancelAnalyze,
+              icon: const Icon(Icons.stop_circle_outlined),
+            ),
+          IconButton(
+            tooltip: searching ? 'Close search' : 'Search',
+            onPressed: searching ? _closeSearch : () => setState(() => _searchOpen = true),
+            icon: Icon(searching ? Icons.search_off : Icons.search),
+          ),
+          _toolsMenu(lib),
+        ],
+      ),
+    );
+  }
+
+  /// The tab's tools, out of the way in a ⋮ menu.
+  Widget _toolsMenu(LibraryController lib) {
+    final idle = !lib.loading && !lib.analyzing;
+    final items = <PopupMenuEntry<String>>[
+      if (_tab == 0) ...[
+        PopupMenuItem(value: 'folder', enabled: idle, child: const Text('Add a music folder')),
+        PopupMenuItem(value: 'files', enabled: idle, child: const Text('Add files')),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'missing',
+          enabled: idle && lib.unanalyzedCount > 0,
+          child: Text(
+            lib.unanalyzedCount > 0 ? 'Analyze missing (${lib.unanalyzedCount})' : 'Analyze missing',
+          ),
+        ),
+        PopupMenuItem(value: 'all', enabled: idle && lib.tracks.isNotEmpty, child: const Text('Re-analyze all')),
+      ],
+      if (_tab == 1) ...[
+        PopupMenuItem(value: 'playlists', enabled: _client != null, child: const Text('Refresh playlists')),
+      ],
+      if (_tab == 2)
+        PopupMenuItem(value: 'import', enabled: !_stickBusy, child: const Text('Import a rekordbox USB')),
+      if (_tab == 3)
+        PopupMenuItem(
+          value: 'clear',
+          enabled: widget.dj.history.isNotEmpty,
+          child: const Text('Clear history'),
+        ),
+      if (widget.onOpenSettings != null) ...[
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'settings', child: Text('Settings')),
+      ],
+    ];
+    return PopupMenuButton<String>(
+      tooltip: 'More',
+      icon: const Icon(Icons.more_vert),
+      color: SideDeckTheme.panelAlt,
+      itemBuilder: (_) => items,
+      onSelected: (v) async {
+        switch (v) {
+          case 'folder':
+            await lib.pickFolder();
+          case 'files':
+            await lib.pickFiles();
+          case 'missing':
+            await _reloadAnalyzedDecks(await lib.analyzeMissing());
+          case 'all':
+            await _reloadAnalyzedDecks(await lib.analyzeAll());
+          case 'playlists':
+            await _loadPlaylists();
+          case 'import':
+            await _importStick();
+          case 'clear':
+            await _confirmClearHistory();
+          case 'settings':
+            widget.onOpenSettings?.call();
+        }
+      },
+    );
+  }
+
+  static String _totalTime(double sec) {
+    final m = (sec / 60).round();
+    return m >= 60 ? '${m ~/ 60} h ${m % 60} min' : '$m min';
+  }
+
+  static const _infoStyle = TextStyle(fontSize: 14, color: SideDeckTheme.text);
+  static const _infoMuted = TextStyle(fontSize: 14, color: SideDeckTheme.muted);
+
+  /// "58 tracks · 6 h 44 min" and the sort, under the top bar. On USB the
+  /// count opens the playlist picker.
+  Widget _infoLine(List<LibraryTrack> local) {
+    Widget? left;
+    var sortable = true;
+    switch (_tab) {
+      case 0:
+        final sec = local.fold(0.0, (s, t) => s + t.durationMs / 1000.0);
+        left = Text.rich(
+          TextSpan(children: [
+            TextSpan(text: '${local.length} tracks', style: _infoStyle),
+            if (sec > 0) TextSpan(text: '   ${_totalTime(sec)}', style: _infoMuted),
+          ]),
+        );
+      case 1:
+        if (_client == null) return const SizedBox(height: 4);
+        if (!_searching && _openPlaylist == null) {
+          left = Text('${_playlists.length} playlists', style: _infoStyle);
+          sortable = false;
+        } else {
+          final sec = _remote.fold(0.0, (s, t) => s + t.duration);
+          left = Text.rich(
+            TextSpan(children: [
+              TextSpan(text: '${_remote.length} tracks', style: _infoStyle),
+              if (sec > 0) TextSpan(text: '   ${_totalTime(sec)}', style: _infoMuted),
+            ]),
+          );
+        }
+      case 2:
+        if (_stick.isEmpty) return const SizedBox(height: 4);
+        final shown = _stickVisible();
+        final sec = shown.fold(0.0, (s, t) => s + t.durationSec);
+        final names = _stickPlaylistNames();
+        final current = _stickPlaylist == null
+            ? 'All tracks'
+            : names.firstWhere((e) => e.$1 == _stickPlaylist, orElse: () => (0, 'Playlist')).$2;
+        left = PopupMenuButton<int>(
+          tooltip: 'Playlist',
+          color: SideDeckTheme.panelAlt,
+          onSelected: (id) => setState(() => _stickPlaylist = id < 0 ? null : id),
+          itemBuilder: (_) => [
+            CheckedPopupMenuItem(value: -1, checked: _stickPlaylist == null, child: const Text('All tracks')),
+            for (final (id, name) in names)
+              CheckedPopupMenuItem(value: id, checked: _stickPlaylist == id, child: Text(name)),
+          ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: current, style: _infoStyle),
+                    TextSpan(text: '   ${shown.length} tracks', style: _infoMuted),
+                    if (sec > 0) TextSpan(text: ' · ${_totalTime(sec)}', style: _infoMuted),
+                  ]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.arrow_drop_down, color: SideDeckTheme.muted),
+            ],
+          ),
+        );
+        // A playlist keeps its own order.
+        sortable = _stickPlaylist == null;
+      default:
+        final n = widget.dj.history.length;
+        left = Text('$n play${n == 1 ? '' : 's'}', style: _infoStyle);
+        sortable = false;
+    }
+    return SizedBox(
+      height: 36,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 16, right: 4),
+        child: Row(
+          children: [
+            Expanded(child: Align(alignment: Alignment.centerLeft, child: left)),
+            if (sortable) _sortMenu(),
           ],
         ),
-        const SizedBox(height: 4),
-        Row(children: tools),
+      ),
+    );
+  }
+
+  Widget _sortMenu() {
+    final label = switch (widget.library.sort) {
+      TrackSort.name => 'Name',
+      TrackSort.bpm => 'BPM',
+      TrackSort.key => 'Key',
+    };
+    return PopupMenuButton<TrackSort>(
+      tooltip: 'Sort',
+      color: SideDeckTheme.panelAlt,
+      onSelected: widget.library.setSort,
+      itemBuilder: (context) => [
+        _sortItem(TrackSort.name, 'Name'),
+        _sortItem(TrackSort.bpm, 'BPM'),
+        _sortItem(TrackSort.key, 'Key'),
       ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: _infoStyle),
+            const Icon(Icons.arrow_drop_down, color: SideDeckTheme.muted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _bottomNav() {
+    return Container(
+      height: 54,
+      decoration: const BoxDecoration(
+        color: SideDeckTheme.panelAlt,
+        border: Border(top: BorderSide(color: Color(0xFF2A3140))),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < _tabs.length; i++)
+            Expanded(
+              child: InkWell(
+                onTap: () => _selectTab(i),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _tabs[i].$1,
+                      size: 22,
+                      color: _tab == i ? SideDeckTheme.accentA : SideDeckTheme.muted,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _tabs[i].$2,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _tab == i ? FontWeight.w700 : FontWeight.w500,
+                        color: _tab == i ? SideDeckTheme.accentA : SideDeckTheme.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -691,7 +832,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
       line,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12),
+      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 13),
     );
   }
 
@@ -708,85 +849,48 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     return color;
   }
 
+  /// Right of the title: "116 BPM" over key and length, as in the reference
+  /// layout; only the length when there is no analysis yet.
   Widget _trackMeta(double? bpm, int? key, double durationSec, {bool gridUnsure = false}) {
     final hasBpm = bpm != null && bpm > 0;
     final hasKey = key != null && key >= 0;
     final keyColor = _compatibleKeyColor(key);
+    final bpmText = hasBpm
+        ? ((bpm - bpm.roundToDouble()).abs() < 0.05 ? bpm.round().toString() : bpm.toStringAsFixed(1))
+        : null;
     return Padding(
-      padding: const EdgeInsets.only(left: 4, right: 2),
+      padding: const EdgeInsets.only(left: 8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (gridUnsure) ...[
-                const GridWarningBadge(label: 'CHECK GRID'),
-                const SizedBox(width: 4),
+          if (bpmText != null)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (gridUnsure) ...[const GridWarningBadge(), const SizedBox(width: 4)],
+                Text('$bpmText BPM', style: const TextStyle(fontSize: 14, color: SideDeckTheme.text)),
               ],
-              Text(
-                hasBpm ? bpm.toStringAsFixed(1) : '—',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: hasBpm ? SideDeckTheme.text : SideDeckTheme.muted,
-                ),
-              ),
-            ],
-          ),
+            ),
           if (durationSec > 0 || hasKey)
             Text.rich(
               TextSpan(
-                style: const TextStyle(color: SideDeckTheme.muted, fontSize: 11),
+                style: const TextStyle(color: SideDeckTheme.muted, fontSize: 13),
                 children: [
-                  if (durationSec > 0) TextSpan(text: formatDuration(durationSec)),
-                  if (durationSec > 0 && hasKey) const TextSpan(text: '  '),
                   if (hasKey)
                     TextSpan(
                       text: formatKey(key),
-                      style: keyColor == null
-                          ? null
-                          : TextStyle(color: keyColor, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        color: keyColor ?? SideDeckTheme.muted,
+                        fontWeight: keyColor == null ? null : FontWeight.w700,
+                      ),
                     ),
+                  if (durationSec > 0 && hasKey) const TextSpan(text: '  '),
+                  if (durationSec > 0) TextSpan(text: formatDuration(durationSec)),
                 ],
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _tabBtn(String label, int i) {
-    final on = _tab == i;
-    return Padding(
-      padding: const EdgeInsets.only(right: 2),
-      child: TextButton(
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 32),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          visualDensity: VisualDensity.compact,
-          foregroundColor: on ? Colors.white : SideDeckTheme.muted,
-          backgroundColor: on ? SideDeckTheme.panelAlt : Colors.transparent,
-        ),
-        onPressed: () {
-          setState(() => _tab = i);
-          // One box serves both tabs; back on Local it must show the filter
-          // that is actually applied.
-          if (i == 0 && _search.text != widget.library.query) {
-            _search.text = widget.library.query;
-          }
-          if (i == 1 && _client != null && !_searching && _openPlaylist == null && _playlists.isEmpty) {
-            _loadPlaylists();
-          }
-        },
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: on ? FontWeight.w800 : FontWeight.w500,
-          ),
-        ),
       ),
     );
   }
@@ -840,80 +944,105 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     );
   }
 
+  /// One song: title and artist, BPM / key / length, and a ⋮ menu (also on a
+  /// tap anywhere on the row) to load it on deck A or B or analyze it.
+  /// [onLoad] null while something else is loading; [working] shows a
+  /// spinner in place of the ⋮.
   Widget _songRow({
-    required bool busyThis,
-    required String analyzeTooltip,
-    required VoidCallback? onAnalyze,
     required String title,
     required String artist,
     String? status,
     required double? bpm,
     required int? key,
     required double durationSec,
-    required List<Widget> actions,
+    required void Function(int deck)? onLoad,
+    VoidCallback? onAnalyze,
+    String analyzeLabel = 'Analyze',
+    bool working = false,
     bool gridUnsure = false,
     bool played = false,
     Widget? lead,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 4, 8, 4),
-      child: Row(
-        children: [
-          // A lead (the history's number and time) takes the analyze slot.
-          if (lead != null)
-            lead
-          else
-          SizedBox(
-            width: 32,
-            height: 32,
-            child: busyThis
-                ? const Padding(
-                    padding: EdgeInsets.all(6),
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : IconButton(
-                    tooltip: analyzeTooltip,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-                    onPressed: onAnalyze,
-                    icon: const Icon(Icons.graphic_eq, size: 20),
-                  ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Played this session: ticked and dimmed, as in Mixxx.
-                Row(
-                  children: [
-                    if (played) ...[
-                      const Tooltip(
-                        message: 'Played this session',
-                        child: Icon(Icons.check, size: 14, color: SideDeckTheme.muted),
+    Future<void> menu(Offset at) async {
+      final size = MediaQuery.sizeOf(context);
+      final v = await showMenu<int>(
+        context: context,
+        color: SideDeckTheme.panelAlt,
+        position: RelativeRect.fromLTRB(at.dx, at.dy, size.width - at.dx, size.height - at.dy),
+        items: [
+          PopupMenuItem(value: 0, enabled: onLoad != null, child: const Text('Load on deck A')),
+          PopupMenuItem(value: 1, enabled: onLoad != null, child: const Text('Load on deck B')),
+          if (analyzeLabel.isNotEmpty && (onAnalyze != null || onLoad != null)) ...[
+            const PopupMenuDivider(),
+            PopupMenuItem(value: 2, enabled: onAnalyze != null, child: Text(analyzeLabel)),
+          ],
+        ],
+      );
+      if (v == 0 || v == 1) onLoad?.call(v!);
+      if (v == 2) onAnalyze?.call();
+    }
+
+    return InkWell(
+      onTapUp: (d) => menu(d.globalPosition),
+      onTap: () {},
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 0, 8),
+        child: Row(
+          children: [
+            if (lead != null) ...[lead, const SizedBox(width: 10)],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Played this session: ticked and dimmed, as in Mixxx.
+                  Row(
+                    children: [
+                      if (played) ...[
+                        const Icon(Icons.check, size: 15, color: SideDeckTheme.muted),
+                        const SizedBox(width: 4),
+                      ],
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: played ? SideDeckTheme.muted : SideDeckTheme.text,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 4),
                     ],
-                    Flexible(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: played ? const TextStyle(color: SideDeckTheme.muted) : null,
+                  ),
+                  ?_trackArtist(artist, status: status),
+                ],
+              ),
+            ),
+            _trackMeta(bpm, key, durationSec, gridUnsure: gridUnsure),
+            SizedBox(
+              width: 44,
+              child: working
+                  ? const Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : Builder(
+                      builder: (bctx) => IconButton(
+                        tooltip: 'Track menu',
+                        icon: const Icon(Icons.more_vert),
+                        onPressed: () {
+                          final box = bctx.findRenderObject() as RenderBox;
+                          menu(box.localToGlobal(box.size.center(Offset.zero)));
+                        },
                       ),
                     ),
-                  ],
-                ),
-                ?_trackArtist(artist, status: status),
-              ],
             ),
-          ),
-          _trackMeta(bpm, key, durationSec, gridUnsure: gridUnsure),
-          const SizedBox(width: 6),
-          ...actions,
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -928,8 +1057,8 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Tap the folder icon, choose your music folder.\n'
-            'Then Analyze (waveform icon) for BPM/key, or tap A / B to load.',
+            'Open ⋮ and add your music folder.\n'
+            'Then tap a track to load it on deck A or B, or to analyze it.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SideDeckTheme.muted),
           ),
@@ -940,14 +1069,9 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
       itemCount: tracks.length,
       itemBuilder: (context, i) {
         final t = tracks[i];
-        final analyzingThis = lib.analyzingPath == t.path;
-        final loadingThis = widget.dj.loadingPath == t.path;
         final busy = lib.analyzing || widget.dj.loadingDeck != null;
         return _songRow(
-          busyThis: analyzingThis,
-          analyzeTooltip: t.hasAnalysis
-              ? 'Re-analyze BPM / grid'
-              : 'Analyze BPM / key',
+          analyzeLabel: t.hasAnalysis ? 'Re-analyze BPM / grid' : 'Analyze BPM / key',
           onAnalyze: busy ? null : () => _analyzeLocal(t),
           title: t.title,
           artist: t.artist,
@@ -956,62 +1080,10 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           gridUnsure: t.gridUnsure,
           played: widget.dj.playedPaths.contains(t.path),
           durationSec: t.durationMs / 1000.0,
-          actions: [
-            _deckBtn('A', busy ? null : () => _loadLocal(t, 0), loadingThis && widget.dj.loadingDeck == 0),
-            const SizedBox(width: 8),
-            _deckBtn('B', busy ? null : () => _loadLocal(t, 1), loadingThis && widget.dj.loadingDeck == 1),
-          ],
+          working: lib.analyzingPath == t.path || widget.dj.loadingPath == t.path,
+          onLoad: busy ? null : (deck) => _loadLocal(t, deck),
         );
       },
-    );
-  }
-
-  Widget _deckBtn(String label, VoidCallback? onPressed, [bool loading = false]) {
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(36, 32),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-      ),
-      onPressed: onPressed,
-      child: loading
-          ? const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Text(label),
-    );
-  }
-
-  Widget _playlistHeader() {
-    final pl = _openPlaylist!;
-    final count = pl.songCount > 0 ? '${pl.songCount}' : '${_remote.length}';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 12, 4),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Playlists',
-            visualDensity: VisualDensity.compact,
-            onPressed: _loadPlaylists,
-            icon: const Icon(Icons.arrow_back, size: 20),
-          ),
-          Expanded(
-            child: Text(
-              pl.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          Text(
-            '$count tracks',
-            style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1110,10 +1182,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         final busyThis = _remoteBusyId == t.id;
         final busy = _remoteBusyId != null || widget.dj.loadingDeck != null;
         return _songRow(
-          busyThis: busyThis,
-          analyzeTooltip: meta == null
-              ? 'Download & analyze'
-              : 'Re-analyze BPM / grid',
+          analyzeLabel: meta == null ? 'Download & analyze' : 'Re-analyze BPM / grid',
           onAnalyze: busy ? null : () => _analyzeRemote(t),
           title: t.title,
           artist: t.artist,
@@ -1122,11 +1191,8 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
           key: meta?.key,
           gridUnsure: meta?.gridUnsure ?? false,
           durationSec: t.duration.toDouble(),
-          actions: [
-            _deckBtn('A', busy ? null : () => _loadRemote(t, 0)),
-            const SizedBox(width: 8),
-            _deckBtn('B', busy ? null : () => _loadRemote(t, 1)),
-          ],
+          working: busyThis,
+          onLoad: busy ? null : (deck) => _loadRemote(t, deck),
         );
       },
     );
@@ -1170,6 +1236,12 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
   static String _clock(DateTime t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
+  static String _playedFor(Duration d) {
+    final m = (d.inSeconds / 60).round();
+    if (m < 60) return '$m min';
+    return m % 60 == 0 ? '${m ~/ 60} h' : '${m ~/ 60} h ${m % 60} min';
+  }
+
   static String _sessionDay(DateTime start, DateTime now) {
     final day = DateTime(start.year, start.month, start.day);
     final today = DateTime(now.year, now.month, now.day);
@@ -1199,6 +1271,12 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
       );
     }
     final q = _search.text.trim().toLowerCase();
+    // Plays logged before lengths were recorded take them from the library.
+    final lengths = <String, double>{
+      for (final t in _stick) t.path: t.durationSec.toDouble(),
+      for (final t in widget.library.tracks) t.path: t.durationMs / 1000.0,
+    };
+    double? lengthOf(String path) => lengths[path];
     final current = HistoryStore.currentSession(widget.dj.history, now);
     final busy = widget.dj.loadingDeck != null || _stickBusy;
     final items = <Widget>[];
@@ -1215,7 +1293,8 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
           child: Text(
-            '${_sessionDay(s.start, now).toUpperCase()} · ${_clock(s.start)}–${_clock(s.end)}'
+            // How long the session played, rather than its clock times.
+            '${_sessionDay(s.start, now).toUpperCase()} · ${_playedFor(s.playedLength(now, lengthOf: lengthOf))}'
             ' · ${s.tracks.length} track${s.tracks.length == 1 ? '' : 's'}'
             '${live ? ' · NOW' : ''}',
             style: TextStyle(
@@ -1250,20 +1329,15 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
                 style: const TextStyle(fontSize: 11, color: SideDeckTheme.muted),
               ),
             ),
-            busyThis: false,
-            analyzeTooltip: '',
-            onAnalyze: null,
+            analyzeLabel: '',
             title: t.title,
             artist: t.artist,
             status: 'deck ${t.deck == 0 ? 'A' : 'B'}',
             bpm: t.bpm > 0 ? t.bpm : null,
             key: t.key >= 0 ? t.key : null,
             durationSec: 0,
-            actions: [
-              _deckBtn('A', busy ? null : () => _loadHistoryTrack(t, 0), loadingThis && widget.dj.loadingDeck == 0),
-              const SizedBox(width: 8),
-              _deckBtn('B', busy ? null : () => _loadHistoryTrack(t, 1), loadingThis && widget.dj.loadingDeck == 1),
-            ],
+            working: loadingThis,
+            onLoad: busy ? null : (deck) => _loadHistoryTrack(t, deck),
           ),
         );
       }

@@ -300,6 +300,7 @@ class DjController extends ChangeNotifier {
       key: d.key,
       deck: i,
       playedAt: DateTime.now(),
+      durationSec: d.duration,
     );
     history = [...history, entry];
     _updatePlayed();

@@ -35,4 +35,33 @@ void main() {
     expect(HistoryStore.currentSession(plays, later), isNull);
     expect(HistoryStore.currentSession(const [], soon), isNull);
   });
+
+  test('session length counts playing time, not pauses', () {
+    PlayedTrack play(String path, Duration at, [double len = 0]) => PlayedTrack(
+      path: path,
+      title: path,
+      artist: '',
+      bpm: 120,
+      key: 0,
+      deck: 0,
+      playedAt: t0.add(at),
+      durationSec: len,
+    );
+    // Logged 30 s in. a (7 min) is cut by b coming in 5 min later; b (6 min)
+    // plays out; an hour off; c (no length logged, 8 min in the library).
+    final s = HistoryStore.sessions([
+      play('a', Duration.zero, 420),
+      play('b', const Duration(minutes: 5), 360),
+      play('c', const Duration(hours: 1, minutes: 30)),
+    ]).single;
+    final after = t0.add(const Duration(hours: 3));
+    expect(s.playedLength(after, lengthOf: (p) => p == 'c' ? 480 : null), const Duration(minutes: 19));
+    // Unknown anywhere: 6 minutes.
+    expect(s.playedLength(after), const Duration(minutes: 17));
+    // Mid-way through c: counts up to now.
+    expect(
+      s.playedLength(t0.add(const Duration(hours: 1, minutes: 32)), lengthOf: (_) => 480),
+      const Duration(minutes: 13, seconds: 30),
+    );
+  });
 }
