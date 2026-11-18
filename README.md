@@ -29,7 +29,11 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 > changes listed under [What this fork adds](#what-this-fork-adds). Build from
 > this branch to get them.
 
-![Two synced decks with the internal mixer hidden: 3-band waveforms meeting at the centre line, bar / phrase counters, auto gain beside the key, and two-column transport rails (CUE over PLAY; beat jump, Q and jump size)](screenshots/decks.png)
+![Two synced decks with the internal mixer hidden and full waveforms: track sections tinted on the overviews (breakdowns in purple), bar / phrase counters with a section countdown (MAIN 8), auto gain beside the key, Auto Cue parking deck B on its first beat, and two-column transport rails](screenshots/decks.png)
+
+<img src="screenshots/portrait.png" alt="The upright layout: deck A above, deck B below, controls on the outside and the two scrolling waveforms meeting in the middle; deck A is in a tinted breakdown with the bar counter counting down to the drop" width="300"> <img src="screenshots/bpm.png" alt="Long-press SYNC: the in-app BPM keypad, upright" width="300">
+
+![Settings: Screen (auto, landscape or portrait) and Deck buttons (hot cue pads, Auto Cue)](screenshots/settings.png)
 
 ![The restyled internal mixer: EQ faders and crossfader (the filter fader is optional)](screenshots/mixer.png)
 
@@ -50,12 +54,13 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | External mixer | Fixed silent playback on Samsung/Qualcomm phones; decks take the full screen in external mode |
 | Waveforms | rbxport-style 3-band waveforms, mirrored at a shared centre line; pinch zoom; smooth motion |
 | Deck controls | New control row and two-column transport rail, CUE, hot cues A–D, quantize, beat jump, on-wave nudge; tap the title for track details |
-| Navigation | Drag the waveform to scrub; bar / phrase counter |
-| Mixer | Restyled faders with a centre notch and blue offset fill; filter fader optional; hide it to give the decks the screen |
+| Navigation | Drag the waveform to scrub; bar / phrase counter; track sections (intro, break, drop, outro) with a countdown |
+| Screen | Upright layout as well as landscape (auto, or locked either way); optional full (mirrored) waveforms |
+| Mixer | Restyled faders with a centre notch and blue offset fill; double-tap resets; filter fader optional; hide it to give the decks the screen |
 | Auto gain | Every track levelled to the same loudness without clipping |
 | Tempo | Key lock switch; optional tempo fader per deck (±8 / ±16 / ±50 %) |
-| Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase |
-| Cues | Cue and hot cues saved per track and restored on load |
+| Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase; tap again to release; long-press to type an exact BPM |
+| Cues | Cue and hot cues saved per track and restored on load; Auto Cue parks new tracks on their first beat; hot cue pads can be hidden |
 | Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
 | Library | Key display setting (Camelot / musical / both); search filter fix; played marks and a History tab; rekordbox USB import (untested on a real stick) |
 
@@ -114,6 +119,27 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
 - **Bar / phrase counter** beside the playhead, e.g. `33.2 ▸3`: bar 33, beat 2,
   three bars to the next 8-bar phrase (red on the last bar). Bar 1 is the grid's
   first beat.
+- **Track sections** (Settings → Waveform, on by default): INTRO, MAIN, BREAK,
+  DROP and OUTRO, found from where the low end (kick and bass) drops out and
+  comes back, bar by bar on the beat grid. Fills and kick drops under 4 bars
+  don't count, and changes land on 4-bar lines. Bass-less stretches are tinted
+  on the overview and detail, each section start gets a coloured line and tag,
+  and the bar counter counts down to the next change within 32 bars
+  (`33.2 ▸3  BREAK 7`). They follow the grid, so a grid fix moves them. A break
+  that keeps the kick going isn't marked yet.
+- **Full waveform** (Settings → Waveform, off by default): both decks' scrolling
+  waveforms drawn mirrored round their middle instead of from the centre line.
+
+### Upright (portrait) layout
+
+**Settings → Screen:** Auto (turns with the phone and keeps to its rotation
+lock), Landscape or Portrait. Upright, the side rail goes: each deck has its
+overview, a title row (library or settings on the right), the readouts, the
+control row and a transport row (CUE, PLAY, ◀◀ ▶▶, jump size, Q, KEY), and the
+two scrolling waveforms meet in the middle of the screen with the mixer below.
+The tempo fader is landscape-only; − / + and the SYNC pad set tempo upright.
+The library toolbar and the BPM pad wrap to fit, and the library stays clear of
+the camera cutout.
 
 ### Cues, hot cues and scrubbing
 
@@ -127,6 +153,11 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
   waveform and overview.
 - **Saved per track:** the cue and hot cues are stored by file path and restored
   on load; a deck with a saved cue opens parked on it.
+- **Auto Cue** (Settings → Deck buttons, on by default): a track with no saved
+  cue loads parked on the first beat where the music starts, skipping leading
+  silence, as on a CDJ. Without a grid it cues the first sound.
+- **Hot cue pads** can be hidden (Settings → Deck buttons) to give the control
+  row room; set cues still show on the waveforms.
 - **Quantize (Q, on by default):** CUE, new hot cues and loop-in snap to the
   nearest beat, and hot cue jumps while playing keep the beat phase.
 - **Beat jump:** ◀◀ ▶▶ by 1, 2, 4, 8, 16 or 32 beats (tap the size box to cycle).
@@ -135,7 +166,8 @@ Upstream: [issue #13](https://github.com/manueljpy/SideDeck/issues/13),
 
 Restyled after rbxport's neutral mixer: flat faders on thin rails with a centre
 notch, and a blue fill from the centre so any EQ, filter or crossfader move away
-from flat is visible. In external mixer mode the strip is hidden and the decks
+from flat is visible. Double-tap a fader to reset it (EQ flat, filter off,
+crossfader centred). In external mixer mode the strip is hidden and the decks
 use the whole screen.
 
 The filter fader is off by default, so the strip is EQ and crossfader only and
@@ -153,7 +185,13 @@ remembered.
 SYNC matches the synced deck's tempo to the other deck and keeps following it.
 With both decks playing it also shifts the synced deck by under half a beat so
 the beats line up; a synced deck started under a playing deck snaps into phase
-as it starts. It aligns beats, not bars.
+as it starts. It aligns beats, not bars. Tap SYNC again to release it; the
+deck keeps the tempo it had.
+
+**Long-press SYNC** to type an exact BPM on an in-app keypad (the phone's
+keyboard would cover a landscape screen): Set, Original (the track's own BPM)
+or Cancel, anywhere from half to double the track's BPM. It releases sync on
+that deck, and a deck synced to it follows.
 
 ### Tempo fader and key lock
 
@@ -253,6 +291,9 @@ cue colours and comments. It has only been tested on synthetic files so far.
 - **On-screen mixer** (Settings): show or hide the filter fader.
 - **Auto gain** (Settings): on or off.
 - **Tempo** (Settings): key lock, the tempo fader, and its direction.
+- **Screen** (Settings): auto, landscape or portrait.
+- **Deck buttons** (Settings): hot cue pads, Auto Cue.
+- **Waveform** (Settings): full waveform, track sections.
 - **Search fix:** the filter could stay active after a search while the box
   looked empty, so other tracks could not be picked. The box now shows the
   active filter and has a clear button.
@@ -280,7 +321,8 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | Q | Rail | Quantize on / off |
 | A B C D | Control row | Hot cues: tap set or jump, long-press clear |
 | ½ · LOOP · ×2 | Control row | Halve, toggle, double the loop |
-| − · SYNC · + | Control row | BPM ±0.1, beat sync |
+| − · SYNC · + | Control row | BPM ±0.1; beat sync (tap again to release, long-press to type a BPM) |
+| Double-tap a fader | Mixer | Reset EQ / filter / crossfader to centre |
 | KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
 | GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |

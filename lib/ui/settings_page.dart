@@ -149,12 +149,19 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 8),
+          // Upright there is no room for icons beside "Landscape".
           SegmentedButton<int>(
-            segments: const [
-              ButtonSegment(value: 0, label: Text('Auto'), icon: Icon(Icons.screen_rotation)),
-              ButtonSegment(value: 1, label: Text('Landscape'), icon: Icon(Icons.stay_current_landscape)),
-              ButtonSegment(value: 2, label: Text('Portrait'), icon: Icon(Icons.stay_current_portrait)),
-            ],
+            segments: MediaQuery.sizeOf(context).width < 600
+                ? const [
+                    ButtonSegment(value: 0, label: Text('Auto')),
+                    ButtonSegment(value: 1, label: Text('Landscape')),
+                    ButtonSegment(value: 2, label: Text('Portrait')),
+                  ]
+                : const [
+                    ButtonSegment(value: 0, label: Text('Auto'), icon: Icon(Icons.screen_rotation)),
+                    ButtonSegment(value: 1, label: Text('Landscape'), icon: Icon(Icons.stay_current_landscape)),
+                    ButtonSegment(value: 2, label: Text('Portrait'), icon: Icon(Icons.stay_current_portrait)),
+                  ],
             selected: {widget.dj.screenOrientation},
             showSelectedIcon: false,
             onSelectionChanged: (s) async {
