@@ -41,11 +41,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 
 ![Track details, opened by tapping a deck's title](screenshots/details.png)
 
-![The library: Local, Remote, USB and History tabs, Camelot keys (compatible ones coloured), the "check grid" warning, a track ticked as played this session, and the filter box](screenshots/library.png)
-
-![The History tab: sessions newest first, each play with its number, time and deck, ready to reload](screenshots/history.png)
-
-![The USB tab, for importing a rekordbox stick](screenshots/usb.png)
+<img src="screenshots/library.png" alt="The library: top bar with search and a tools menu, track count, total time and sort, rows with BPM over key and length, played tracks ticked, the check-grid mark, and the tabs along the bottom" width="240"> <img src="screenshots/track-menu.png" alt="A track menu: load on deck A or B, or re-analyze" width="240"> <img src="screenshots/history.png" alt="The History tab: today, 1 h 1 min played over 12 tracks, each play with its number, time and deck" width="240"> <img src="screenshots/usb.png" alt="The USB tab, for importing a rekordbox stick" width="240">
 
 ## What this fork adds
 
@@ -62,7 +58,7 @@ USB out to an external mixer such as the Teenage Engineering EP-136 K.O. Sidekic
 | Sync | Beat sync: SYNC matches tempo *and* snaps into beat phase; tap again to release; long-press to type an exact BPM |
 | Cues | Cue and hot cues saved per track and restored on load; Auto Cue parks new tracks on their first beat; hot cue pads can be hidden |
 | Beat grid | Whole-track analysis, kick-attack grid fit, checked BPM rounding, drift correction, "check grid" warning, hand-fixed grids protected; grid fix tools (beat here, bar here, BPM edit, tap tempo, undo) |
-| Library | Key display setting (Camelot / musical / both); search filter fix; played marks and a History tab; rekordbox USB import (untested on a real stick) |
+| Library | Clean layout: top bar with search and a ⋮ tools menu, count / total time / sort line, rows with a ⋮ load menu, tabs along the bottom; key display setting; played marks and a History tab with time played; rekordbox USB import (untested on a real stick) |
 
 Details of each are below.
 
@@ -236,7 +232,7 @@ Studied from [Mixxx](https://github.com/mixxxdj/mixxx),
   the BPM, kept only if the grid then holds clearly better.
 - **"Check grid" warning:** if the grid does not hold through the track (a
   wrong tempo, a tempo change, or a section stitched in at a different phase),
-  the deck's BPM turns amber with a "!" and the library shows **CHECK GRID**.
+  the deck's BPM turns amber with a "!" and the library marks the track with a "!".
   A tight kick-attack lock counts as trusted.
 - **Hand-fixed grids are protected:** grid edits mark a track, "Re-analyze all"
   skips it, and the analysis cache now migrates in place instead of being wiped
@@ -267,8 +263,8 @@ clears "check grid"; a synced deck re-matches its tempo.
 
 ### rekordbox USB import (phase 1, untested on a real stick)
 
-The library's **USB** tab imports a stick exported from rekordbox: tap the USB
-icon and pick the stick's root (the folder holding `PIONEER` and `Contents`),
+The library's **USB** tab imports a stick exported from rekordbox: open ⋮ →
+**Import a rekordbox USB** and pick the stick's root (the folder holding `PIONEER` and `Contents`),
 connected through a USB-C hub alongside the mixer if needed.
 
 - Tracks, playlists (folders shown as `Folder / Playlist`), keys, beat grids and
@@ -287,6 +283,14 @@ cue colours and comments. It has only been tested on synthetic files so far.
 
 ### Library and settings
 
+- **Layout:** a top bar with ✕, the tab's name, 🔍 search and a **⋮** menu
+  holding the tab's tools (Local: add a music folder or files, analyze missing,
+  re-analyze all; Remote: refresh playlists; USB: import a stick; History:
+  clear; Settings). Below it, the track count and total length with the sort
+  (Name / BPM / Key) on the right; on USB the count is the playlist picker.
+  Rows show title and artist, BPM over key and length, and a ⋮; tap it or the
+  row for **Load on deck A / B** and **Analyze**. Local, Remote, USB and
+  History sit along the bottom.
 - **Key display** (Settings): Camelot `10A` (default), musical `Bm`, or both.
 - **On-screen mixer** (Settings): show or hide the filter fader.
 - **Auto gain** (Settings): on or off.
@@ -303,9 +307,11 @@ cue colours and comments. It has only been tested on synthetic files so far.
   lists, tracks played this session are ticked ✓ and dimmed so you don't
   repeat one. A session is a run of plays less than 3 hours apart, so the
   marks survive an app restart mid-set and are gone by the next night.
-- **History tab:** sessions newest first ("TODAY · 21:04–23:10 · 14 tracks ·
-  NOW"), each play with its number, time, deck, BPM and key, and A / B to load
-  it again. The filter box searches it; the bin icon clears the history.
+- **History tab:** sessions newest first ("TODAY · 1 h 1 min · 12 tracks · NOW"),
+  each play with its number, time, deck, BPM and key, and the row menu to load
+  it again. The time is how long the session played: each track counts until
+  the next one came in or its length ran out, so pauses don't count. Search
+  filters it; ⋮ → Clear history empties it.
 
 ## Controls quick reference
 
@@ -326,8 +332,10 @@ cue colours and comments. It has only been tested on synthetic files so far.
 | KEY · fader · ±% | Rail (when turned on) | Key lock, tempo (double-tap resets), range |
 | GRID | Control row | Grid fix tools: beat here, bar here, 5 ms, BPM, tap, undo |
 | ▼ / ▲ MIXER | Above the crossfader / bottom strip | Hide / show the internal mixer |
-| USB tab | Library | Import a rekordbox stick |
-| History tab | Library | Tracks played, by session; reload onto A / B |
+| Tap a track (or its ⋮) | Library | Load on deck A / B, analyze |
+| ⋮ (top right) | Library | The tab's tools: add music, analyze, import USB, clear history |
+| USB tab | Library | Import a rekordbox stick (⋮), pick a playlist |
+| History tab | Library | Tracks played, by session, with time played |
 
 ## Requirements
 

@@ -359,9 +359,10 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Plug in a USB stick exported from rekordbox (through a USB-C hub),\n'
-            'open ⋮ → Import a rekordbox USB, pick the stick. Its tracks, playlists, beat grids\n'
-            'and cues come in; the grids and cues you set in rekordbox are kept.',
+            'Plug in a USB stick exported from rekordbox (through a USB-C hub if the '
+            'mixer is on the port), then open ⋮ → Import a rekordbox USB and pick the '
+            'stick.\n\nIts tracks, playlists, beat grids and cues come in; the grids and '
+            'cues you set in rekordbox are kept.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SideDeckTheme.muted),
           ),
@@ -1057,7 +1058,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Open ⋮ and add your music folder.\n'
+            'Open ⋮ and add your music folder.\n\n'
             'Then tap a track to load it on deck A or B, or to analyze it.',
             textAlign: TextAlign.center,
             style: TextStyle(color: SideDeckTheme.muted),
