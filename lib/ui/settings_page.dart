@@ -190,6 +190,35 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
+            title: const Text('GRID button'),
+            subtitle: const Text(
+              'The beat grid fix tools (beat here, bar here, BPM, tap, undo). For '
+              'preparing tracks before a set; off keeps the deck row clear.',
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showGridButton,
+            onChanged: (v) async {
+              await widget.dj.setShowGridButton(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Quantize button (Q)'),
+            subtitle: Text(
+              'Hidden, quantize stays as it is: '
+              '${widget.dj.deckA.quantize && widget.dj.deckB.quantize ? 'on' : 'as last set'} '
+              '(cues, hot cues and loops snap to the beat).',
+              style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+            ),
+            value: widget.dj.showQuantizeButton,
+            onChanged: (v) async {
+              await widget.dj.setShowQuantizeButton(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
             title: const Text('Auto cue'),
             subtitle: const Text(
               'On load, the cue sits on the first beat where the music starts, '

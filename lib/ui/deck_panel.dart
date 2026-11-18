@@ -192,8 +192,10 @@ class DeckPanel extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ...(gridEditing ? _gridEditor() : _performanceControls(context, d)),
-                  const SizedBox(width: 6),
-                  _DeckButton(label: 'GRID', lit: gridEditing, width: 40, onTap: onToggleGrid),
+                  if (controller.showGridButton) ...[
+                    const SizedBox(width: 6),
+                    _DeckButton(label: 'GRID', lit: gridEditing, width: 40, onTap: onToggleGrid),
+                  ],
                 ],
               ),
             )
@@ -216,8 +218,10 @@ class DeckPanel extends StatelessWidget {
           const SizedBox(width: 6),
           _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
           const SizedBox(width: 6),
-          _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
-          const SizedBox(width: 6),
+          if (controller.showQuantizeButton) ...[
+            _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+            const SizedBox(width: 6),
+          ],
           _railChip(label: 'KEY', lit: d.keylock, onTap: () => controller.setKeylock(index, !d.keylock)),
         ],
       ),
@@ -348,8 +352,10 @@ class DeckPanel extends StatelessWidget {
                 enabled: d.loaded && d.bpm > 1,
                 onTap: () => controller.jump(index, 1),
               ),
-              const SizedBox(height: 6),
-              _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+              if (controller.showQuantizeButton) ...[
+                const SizedBox(height: 6),
+                _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+              ],
               const SizedBox(height: 6),
               _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
             ],
@@ -483,8 +489,10 @@ class DeckPanel extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           ...controls,
-          const SizedBox(width: 6),
-          _DeckButton(label: 'GRID', lit: gridEditing, width: 40, onTap: onToggleGrid),
+          if (controller.showGridButton) ...[
+            const SizedBox(width: 6),
+            _DeckButton(label: 'GRID', lit: gridEditing, width: 40, onTap: onToggleGrid),
+          ],
         ],
       ),
     );

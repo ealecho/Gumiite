@@ -309,7 +309,8 @@ class _HomePageState extends State<HomePage> {
       controller: _djReady,
       index: i,
       portrait: portrait,
-      gridEditing: _gridEditDeck == i,
+      // Hiding the GRID button (Settings) also leaves GRID mode.
+      gridEditing: _djReady.showGridButton && _gridEditDeck == i,
       onToggleGrid: () => setState(() => _gridEditDeck = _gridEditDeck == i ? null : i),
       onLoad: _openLibrary,
       onLibrary: _openLibrary,

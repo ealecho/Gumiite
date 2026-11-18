@@ -143,6 +143,27 @@ class DjController extends ChangeNotifier {
     await prefs.setBool('show_hot_cues', on);
   }
 
+  /// The GRID button (grid fix tools), off by default: grids are fixed while
+  /// preparing a set, not during one.
+  bool showGridButton = false;
+
+  /// The Q button. Hidden, quantize keeps its setting (on by default).
+  bool showQuantizeButton = false;
+
+  Future<void> setShowGridButton(bool on) async {
+    showGridButton = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_grid_button', on);
+  }
+
+  Future<void> setShowQuantizeButton(bool on) async {
+    showQuantizeButton = on;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('show_quantize_button', on);
+  }
+
   /// Settings → Screen: 0 follows the phone (and its rotation lock),
   /// 1 landscape only, 2 portrait only.
   int screenOrientation = 0;
@@ -191,6 +212,8 @@ class DjController extends ChangeNotifier {
     fullWaveform = prefs.getBool('full_waveform') ?? false;
     showHotCues = prefs.getBool('show_hot_cues') ?? true;
     autoCue = prefs.getBool('auto_cue') ?? true;
+    showGridButton = prefs.getBool('show_grid_button') ?? false;
+    showQuantizeButton = prefs.getBool('show_quantize_button') ?? false;
     notifyListeners();
   }
 
