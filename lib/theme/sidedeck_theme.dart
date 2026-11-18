@@ -22,6 +22,59 @@ class SideDeckTheme {
   static const playRing = Color(0xFF36642A);
   static const playLit = Color(0xFF60D330);
 
+  // Depth for the deck controls: raised buttons lit from above, recessed
+  // readouts and fader wells, so controls stand off the flat rows.
+  static const _raisedTop = Color(0xFF3E3E3E);
+  static const _raisedBottom = Color(0xFF2A2A2A);
+  static const _raisedEdge = Color(0xFF4C4C4C);
+  static const _litTop = Color(0xFF4A86F0);
+  static const _litBottom = Color(0xFF2B5FC8);
+  static const wellFill = Color(0xFF141414);
+  static const wellEdge = Color(0xFF3A3A3A);
+
+  /// A raised button face; [lit] glows blue, [tint] colours an "on" face
+  /// (e.g. a set hot cue in its slot colour).
+  static BoxDecoration raised({bool lit = false, Color? tint, double radius = 3}) {
+    final Color top, bottom, edge;
+    if (tint != null) {
+      top = Color.lerp(tint, Colors.white, 0.18)!;
+      bottom = Color.lerp(tint, Colors.black, 0.18)!;
+      edge = Color.lerp(tint, Colors.white, 0.35)!;
+    } else if (lit) {
+      top = _litTop;
+      bottom = _litBottom;
+      edge = const Color(0xFF6FA0F5);
+    } else {
+      top = _raisedTop;
+      bottom = _raisedBottom;
+      edge = _raisedEdge;
+    }
+    // A rounded box needs one border colour all round (Flutter can't paint
+    // mixed sides with a radius), so the lit top edge is drawn into the
+    // gradient and the rim is a single dark line.
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [edge, top, bottom],
+        stops: const [0, 0.1, 1],
+      ),
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: const Color(0xFF101010), width: 1),
+      boxShadow: [
+        if (lit && tint == null) BoxShadow(color: _litTop.withValues(alpha: 0.35), blurRadius: 6),
+        const BoxShadow(color: Color(0x66000000), blurRadius: 2, offset: Offset(0, 1)),
+      ],
+    );
+  }
+
+  /// A sunken box for readouts and fader wells: dark fill, thin rim.
+  static BoxDecoration recessed({double radius = 4}) => BoxDecoration(
+    color: wellFill,
+    borderRadius: BorderRadius.circular(radius),
+    border: Border.all(color: wellEdge, width: 1),
+  );
+
   static ThemeData dark() {
     final base = ThemeData(
       brightness: Brightness.dark,

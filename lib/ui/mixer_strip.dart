@@ -69,13 +69,21 @@ class MixerStrip extends StatelessWidget {
               _deckTag(0),
               const SizedBox(width: 8),
               Expanded(
-                child: _fader(
-                  value: controller.xfader,
-                  min: 0,
-                  max: 1,
-                  onChanged: controller.setXfader,
-                  thumbLength: 14,
-                  thumbWidth: 34,
+                child: Center(
+                  child: SizedBox(
+                    height: 44,
+                    child: _FaderWell(
+                      vertical: false,
+                      child: _fader(
+                        value: controller.xfader,
+                        min: 0,
+                        max: 1,
+                        onChanged: controller.setXfader,
+                        thumbLength: 14,
+                        thumbWidth: 34,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -130,9 +138,15 @@ class MixerStrip extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: RotatedBox(
-            quarterTurns: 3,
-            child: _fader(value: value, min: min, max: max, onChanged: onChanged),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: _FaderWell(
+              vertical: true,
+              child: RotatedBox(
+                quarterTurns: 3,
+                child: _fader(value: value, min: min, max: max, onChanged: onChanged),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 2),
@@ -173,7 +187,7 @@ class MixerStrip extends StatelessWidget {
 class _CenterFillTrack extends SliderTrackShape with BaseSliderTrackShape {
   const _CenterFillTrack();
 
-  static const _rail = Color(0xFF323232);
+  static const _rail = Color(0xFF050505);
   static const _notch = Color(0xFF8A8A8A);
 
   @override
@@ -240,14 +254,30 @@ class _FaderThumb extends SliderComponentShape {
     required Size sizeWithOverflow,
   }) {
     final canvas = context.canvas;
-    final body = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: center, width: length, height: width),
-      const Radius.circular(2),
+    final rect = Rect.fromCenter(center: center, width: length, height: width);
+    final body = RRect.fromRectAndRadius(rect, const Radius.circular(2));
+    // Drop shadow, a cap shaded across its grip, a bright centre line.
+    canvas.drawRRect(
+      body.shift(const Offset(0, 1.5)),
+      Paint()..color = const Color(0x99000000),
     );
-    canvas.drawRRect(body, Paint()..color = SideDeckTheme.deckOutline);
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..shader = const LinearGradient(
+          colors: [Color(0xFF6A6A6A), Color(0xFF3A3A3A), Color(0xFF5A5A5A)],
+        ).createShader(rect),
+    );
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = const Color(0xFF1A1A1A),
+    );
     canvas.drawRect(
-      Rect.fromCenter(center: center, width: 1.5, height: width - 6),
-      Paint()..color = const Color(0xFFD0D0D0),
+      Rect.fromCenter(center: center, width: 2, height: width - 6),
+      Paint()..color = const Color(0xFFF0F0F0),
     );
   }
 }
@@ -441,4 +471,57 @@ class _HoldRepeatButtonState extends State<HoldRepeatButton> {
       child: widget.child,
     );
   }
+}
+
+/// A recessed well behind a fader, with tick marks either side of the rail
+/// (a longer one at the centre), like a hardware mixer's fader slot.
+class _FaderWell extends StatelessWidget {
+  const _FaderWell({required this.vertical, required this.child});
+
+  final bool vertical;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: SideDeckTheme.recessed(),
+      child: CustomPaint(painter: _TickPainter(vertical: vertical), child: child),
+    );
+  }
+}
+
+class _TickPainter extends CustomPainter {
+  const _TickPainter({required this.vertical});
+
+  final bool vertical;
+  static const _ticks = 9;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF4A4A4A)
+      ..strokeWidth = 1;
+    final along = vertical ? size.height : size.width;
+    final across = vertical ? size.width : size.height;
+    const inset = 10.0;
+    final mid = across / 2;
+    for (var i = 0; i < _ticks; i++) {
+      final p = inset + (along - inset * 2) * i / (_ticks - 1);
+      final centre = i == _ticks ~/ 2;
+      final reach = across * (centre ? 0.42 : 0.3);
+      const gap = 5.0;
+      for (final sign in const [-1.0, 1.0]) {
+        final a = mid + sign * gap;
+        final b = mid + sign * reach;
+        if (vertical) {
+          canvas.drawLine(Offset(a, p), Offset(b, p), paint);
+        } else {
+          canvas.drawLine(Offset(p, a), Offset(p, b), paint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TickPainter old) => old.vertical != vertical;
 }

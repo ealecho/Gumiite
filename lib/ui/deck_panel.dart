@@ -182,10 +182,12 @@ class DeckPanel extends StatelessWidget {
     final perf = Container(
       height: _rowH,
       color: SideDeckTheme.deckRow,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      // Right-aligned, in line with the transport row's buttons below.
+      padding: const EdgeInsets.only(left: 6, right: 10, top: 2, bottom: 2),
       child: d.loaded
           ? FittedBox(
               fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -382,10 +384,7 @@ class DeckPanel extends StatelessWidget {
       width: 30,
       height: 24,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: lit ? SideDeckTheme.deckLit : SideDeckTheme.deckButton,
-        borderRadius: BorderRadius.circular(2),
-      ),
+      decoration: SideDeckTheme.raised(lit: lit),
       child: icon != null
           ? Icon(icon, size: 15, color: fg)
           : Text(
@@ -603,17 +602,28 @@ class DeckPanel extends StatelessWidget {
         ],
         groupGap,
       ],
-      _DeckButton(label: '½', enabled: canHalf, onStep: () => controller.halfLoop(index)),
+      // Loop: ‹ halves, the beat count toggles the loop (lit while on), › doubles.
+      _DeckButton(
+        label: 'Halve loop',
+        icon: Icons.chevron_left,
+        enabled: canHalf,
+        onStep: () => controller.halfLoop(index),
+      ),
       gap,
       _DeckButton(
         label: beatsLabel,
-        sub: 'LOOP',
-        width: 40,
+        display: true,
+        width: 36,
         lit: d.loopEnabled,
         onTap: () => controller.setLoop(index, !d.loopEnabled, d.loopBars == 0 ? 1 : d.loopBars),
       ),
       gap,
-      _DeckButton(label: '×2', enabled: canDouble, onStep: () => controller.doubleLoop(index)),
+      _DeckButton(
+        label: 'Double loop',
+        icon: Icons.chevron_right,
+        enabled: canDouble,
+        onStep: () => controller.doubleLoop(index),
+      ),
       groupGap,
       _DeckButton(label: '−', enabled: hasBpm, onStep: () => controller.nudgeBpm(index, -0.1)),
       gap,
@@ -711,10 +721,7 @@ class _HotCuePad extends StatelessWidget {
         width: 26,
         height: 26,
         alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: set ? colour : SideDeckTheme.deckButton,
-          borderRadius: BorderRadius.circular(2),
-        ),
+        decoration: SideDeckTheme.raised(tint: set ? colour : null),
         child: Text(
           WaveformPainter.hotCueLabel(slot),
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, height: 1, color: set ? Colors.black : colour),
@@ -799,8 +806,15 @@ class _DeckButton extends StatelessWidget {
     this.onStep,
     this.onPress,
     this.onLongPress,
+    this.icon,
+    this.display = false,
   });
 
+  /// Shown instead of [label] (which then only names the button).
+  final IconData? icon;
+
+  /// A value readout (the loop length) rather than a button: recessed.
+  final bool display;
   final VoidCallback? onLongPress;
   final String label;
   final String? sub;
@@ -813,7 +827,9 @@ class _DeckButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = !enabled ? SideDeckTheme.deckOutline : Colors.white;
+    final fg = !enabled
+        ? SideDeckTheme.deckOutline
+        : (display && lit ? const Color(0xFF6FA0F5) : Colors.white);
     final Widget content;
     if (sub != null) {
       content = Column(
@@ -835,6 +851,8 @@ class _DeckButton extends StatelessWidget {
           ),
         ],
       );
+    } else if (icon != null) {
+      content = Icon(icon, size: 20, color: fg);
     } else {
       content = Text(
         label,
@@ -845,10 +863,13 @@ class _DeckButton extends StatelessWidget {
       width: width,
       height: 26,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: lit ? SideDeckTheme.deckLit : SideDeckTheme.deckButton,
-        borderRadius: BorderRadius.circular(2),
-      ),
+      // A readout sits sunk in a dark box, its text blue while on; buttons
+      // are raised.
+      decoration: display
+          ? SideDeckTheme.recessed(radius: 3).copyWith(
+              border: Border.all(color: lit ? SideDeckTheme.deckLit : SideDeckTheme.wellEdge),
+            )
+          : SideDeckTheme.raised(lit: lit),
       child: content,
     );
     if (!enabled) return face;
