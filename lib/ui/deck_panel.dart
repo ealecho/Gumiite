@@ -168,6 +168,7 @@ class DeckPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
+          if (index == 1) ...[_recButton(), const SizedBox(width: 10)],
           tool,
         ],
       ),
@@ -245,6 +246,60 @@ class DeckPanel extends StatelessWidget {
     return ColoredBox(color: SideDeckTheme.deckBg, child: body);
   }
 
+  /// Mix recording (deck B, by Settings): records the USB mixer's return,
+  /// its mix with effects, and saves it to Music/SideDeck on stop. Red with
+  /// the elapsed time while recording.
+  Widget _recButton() {
+    final rec = controller.recording;
+    final saving = controller.recordingSaving;
+    final secs = controller.recordingSeconds.floor();
+    final h = secs ~/ 3600, m = (secs ~/ 60) % 60, sec = secs % 60;
+    String two(int v) => v.toString().padLeft(2, '0');
+    final time = h > 0 ? '$h:${two(m)}:${two(sec)}' : '${two(m)}:${two(sec)}';
+    const red = Color(0xFFE53935);
+    final Widget label = saving
+        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  color: rec ? Colors.white : red,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                rec ? time : 'REC',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                  color: Colors.white,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          );
+    return Tooltip(
+      message: rec ? 'Stop and save the recording' : "Record the mixer's mix",
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: saving ? null : controller.toggleRecording,
+        child: Container(
+          height: 20,
+          constraints: const BoxConstraints(minWidth: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          alignment: Alignment.center,
+          decoration: rec ? SideDeckTheme.raised(tint: red) : SideDeckTheme.raised(),
+          child: label,
+        ),
+      ),
+    );
+  }
+
   Widget _deckTag() => Container(
     width: 18,
     height: 14,
@@ -275,7 +330,19 @@ class DeckPanel extends StatelessWidget {
     final children = <Widget>[
       Padding(
         padding: const EdgeInsets.all(4),
-        child: Row(children: [tag, const Spacer(), tool]),
+        child: Row(
+          children: [
+            tag,
+            // Shrinks to fit the narrow rail while it shows the time.
+            if (index == 1) ...[
+              const SizedBox(width: 4),
+              Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _recButton())),
+              const SizedBox(width: 4),
+            ],
+            const Spacer(),
+            tool,
+          ],
+        ),
       ),
       Expanded(
         // Keep clear of the centre line, so deck B's CUE isn't right against

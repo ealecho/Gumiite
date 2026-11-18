@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sidedeck/engine/music_utils.dart';
@@ -21,6 +24,56 @@ class _SettingsPageState extends State<SettingsPage> {
   final _pass = TextEditingController();
   String? _status;
   bool _busy = false;
+  bool _inputTesting = false;
+
+  Future<void> _testUsbInput() async {
+    setState(() => _inputTesting = true);
+    final r = await UsbOutput.testInput(seconds: 60);
+    if (!mounted) return;
+    setState(() => _inputTesting = false);
+    final ok = r['ok'] == true;
+    final peak = (r['peakDb'] as List?)?.cast<num>() ?? const [];
+    final rms = (r['rmsDb'] as List?)?.cast<num>() ?? const [];
+    String lvl(num db) => db <= -119 ? 'silent' : '${db.toStringAsFixed(1)} dB';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: SideDeckTheme.panel,
+        title: Text(ok ? 'USB input: ${r['channels']} channels' : 'USB input test'),
+        content: SingleChildScrollView(
+          child: ok
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${r['device']} · ${r['sampleRate']} Hz · '
+                      '${r['float'] == true ? '32-bit float' : '16-bit'} · '
+                      '${(r['seconds'] as num).toStringAsFixed(1)} s',
+                      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    for (var i = 0; i < peak.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          'Ch ${i + 1}:  peak ${lvl(peak[i])}   avg ${lvl(rms[i])}',
+                          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+                        ),
+                      ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Saved to ${r['path']}',
+                      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 11),
+                    ),
+                  ],
+                )
+              : Text('${r['error'] ?? 'Failed'}'),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -111,6 +164,21 @@ class _SettingsPageState extends State<SettingsPage> {
               }
             },
           ),
+          // Debug builds only: what does the mixer send back over USB?
+          if (kDebugMode && Platform.isAndroid)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: _inputTesting
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.mic_external_on_outlined),
+              title: const Text('Test USB input (1 min)'),
+              subtitle: const Text(
+                'Debug: records a minute from the mixer\'s USB input, every channel, '
+                'and shows each one\'s level. Play a deck with a mixer effect on while it runs.',
+                style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+              ),
+              onTap: _inputTesting ? null : _testUsbInput,
+            ),
           const Divider(height: 32),
           const Text(
             'On-screen mixer',

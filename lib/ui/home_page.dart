@@ -76,6 +76,16 @@ class _HomePageState extends State<HomePage> {
         );
       });
     }
+    final recMsg = dj.recordingMessage;
+    if (recMsg != null) {
+      dj.clearRecordingMessage();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(recMsg), duration: const Duration(seconds: 6)),
+        );
+      });
+    }
     final offer = dj.mixerOffer;
     if (offer == null) {
       if (_mixerDialogOpen) _dismissMixerDialog();

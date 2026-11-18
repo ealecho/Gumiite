@@ -14,7 +14,9 @@ import android.util.Log
 import androidx.annotation.RequiresApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Multi-channel USB playback: deck A on USB 1-2, deck B on USB 3-4.
@@ -32,6 +34,10 @@ import kotlin.math.max
  * (google/oboe#2343).
  */
 object UsbPlayer {
+    /** Limiter ceiling (-0.3 dBFS) and release per frame (~80 ms at 48 kHz). */
+    private const val LIMIT_CEILING = 0.966f
+    private const val LIMIT_RELEASE = 0.00026f
+
     init {
         System.loadLibrary("dj_engine")
     }
@@ -379,8 +385,62 @@ object UsbPlayer {
         val ints = buffer.asIntBuffer()
         val shorts = if (encoding == AudioFormat.ENCODING_PCM_16BIT) ShortArray(samples) else null
         var stalls = 0
+        // Real audio priority, above the UI and the mix recorder.
+        try {
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO)
+        } catch (_: Exception) {}
+        val pairs = (channels + 1) / 2
+        val limGain = FloatArray(pairs) { 1f }
+        val overs = IntArray(pairs)
+        val overPeak = FloatArray(pairs)
+        var lastUnderruns = t.underrunCount
+        var lastReport = System.nanoTime()
         while (running) {
             usbRender(handle, buffer, FRAMES, channels)
+            // Peak limiter per stereo pair (one per deck): a time-stretched loud
+            // track can overshoot full scale on kicks, and a hard clip there is a
+            // fuzzy tick on the mixer. Untouched below the ceiling.
+            for (fr in 0 until FRAMES) {
+                for (p in 0 until pairs) {
+                    val i0 = fr * channels + p * 2
+                    val i1 = if (p * 2 + 1 < channels) i0 + 1 else i0
+                    val a = floats.get(i0)
+                    val b = floats.get(i1)
+                    val peak = max(abs(a), abs(b))
+                    if (peak > 1f) {
+                        overs[p]++
+                        if (peak > overPeak[p]) overPeak[p] = peak
+                    }
+                    var g = limGain[p]
+                    if (peak * g > LIMIT_CEILING) {
+                        g = LIMIT_CEILING / peak
+                    } else if (g < 1f) {
+                        g = min(1f, g + (1f - g) * LIMIT_RELEASE)
+                    }
+                    limGain[p] = g
+                    if (g < 1f) {
+                        floats.put(i0, a * g)
+                        if (i1 != i0) floats.put(i1, b * g)
+                    }
+                }
+            }
+            val now = System.nanoTime()
+            if (now - lastReport > 2_000_000_000L) {
+                lastReport = now
+                val u = t.underrunCount
+                if (u > lastUnderruns) {
+                    Log.w("sidedeck", "usb out: underrun x${u - lastUnderruns} (audio ran dry)")
+                    lastUnderruns = u
+                }
+                for (p in 0 until pairs) {
+                    if (overs[p] > 0) {
+                        val db = 20 * kotlin.math.log10(overPeak[p].toDouble())
+                        Log.w("sidedeck", "usb out: deck ${'A' + p} over full scale x${overs[p]} (max +${"%.1f".format(db)} dB), limited")
+                        overs[p] = 0
+                        overPeak[p] = 0f
+                    }
+                }
+            }
             when (encoding) {
                 AudioFormat.ENCODING_PCM_32BIT -> {
                     for (i in 0 until samples) {

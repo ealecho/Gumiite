@@ -1,7 +1,9 @@
 package es.manifold.sidedeck
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
@@ -67,6 +69,62 @@ class MainActivity : FlutterActivity() {
                         usbExecutor.execute {
                             UsbPlayer.stop()
                             mainHandler.post { result.success(null) }
+                        }
+                    }
+                    // Record the USB mixer's return (its mix, effects included).
+                    "startRecording" -> {
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 4712)
+                            result.success(mapOf("ok" to false, "permission" to true))
+                        } else {
+                            val appCtx = applicationContext
+                            usbExecutor.execute {
+                                val map = MixRecorder.start(appCtx)
+                                mainHandler.post { result.success(map) }
+                            }
+                        }
+                    }
+                    "stopRecording" -> {
+                        val appCtx = applicationContext
+                        Thread({
+                            val map = MixRecorder.stop(appCtx)
+                            mainHandler.post { result.success(map) }
+                        }, "sidedeck-rec-save").start()
+                    }
+                    "recordingStatus" -> result.success(MixRecorder.status())
+                    "recoverRecording" -> {
+                        val appCtx = applicationContext
+                        Thread({
+                            val map = MixRecorder.recoverLeftover(appCtx)
+                            mainHandler.post { result.success(map) }
+                        }, "sidedeck-rec-recover").start()
+                    }
+                    // Debug: record a few seconds from a USB mixer's input.
+                    "testUsbInput" -> {
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 4711)
+                            result.success(
+                                mapOf(
+                                    "ok" to false,
+                                    "permission" to true,
+                                    "error" to "Allow recording audio, then tap the test again.",
+                                ),
+                            )
+                        } else {
+                            val seconds = call.argument<Int>("seconds") ?: 10
+                            val appCtx = applicationContext
+                            Thread({
+                                val map = try {
+                                    UsbInputTest.record(appCtx, seconds)
+                                } catch (e: Exception) {
+                                    mapOf("ok" to false, "error" to (e.message ?: e.toString()))
+                                }
+                                mainHandler.post { result.success(map) }
+                            }, "sidedeck-usb-in-test").start()
                         }
                     }
                     else -> result.notImplemented()

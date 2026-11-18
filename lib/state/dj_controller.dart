@@ -9,6 +9,7 @@ import 'package:sidedeck/engine/analysis_cache.dart';
 import 'package:sidedeck/engine/auto_cue.dart';
 import 'package:sidedeck/engine/cue_store.dart';
 import 'package:sidedeck/engine/history_store.dart';
+import 'package:sidedeck/engine/mix_recorder.dart';
 import 'package:sidedeck/engine/music_utils.dart' as music;
 import 'package:sidedeck/engine/music_utils.dart' show KeyNotation;
 import 'package:sidedeck/engine/native_engine.dart';
@@ -92,6 +93,7 @@ class DjController extends ChangeNotifier {
     _loadHistory();
     _loadTempoPrefs();
     _loadScreenPrefs();
+    _recoverRecording();
   }
 
   // Tempo fader and key lock, per deck, after the CDJ's TEMPO range and
@@ -141,6 +143,79 @@ class DjController extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('show_hot_cues', on);
+  }
+
+  // Mix recording: the USB mixer's return (its mix, effects included), saved
+  // to Music/SideDeck on stop. See MixRecorder.
+  bool recording = false;
+  bool recordingSaving = false;
+  double recordingSeconds = 0;
+  Timer? _recordPoll;
+
+  /// Latest outcome to show once ("Saved SideDeck mix … to Music/SideDeck").
+  String? recordingMessage;
+
+  void clearRecordingMessage() => recordingMessage = null;
+
+  Future<void> toggleRecording() async {
+    if (recordingSaving) return;
+    if (recording) {
+      await _stopRecording();
+      return;
+    }
+    if (!externalMixer) {
+      recordingMessage = 'Recording takes the mix from the USB mixer: turn on the external mixer first.';
+      notifyListeners();
+      return;
+    }
+    final r = await MixRecorder.start();
+    if (r['permission'] == true) {
+      recordingMessage = 'Allow recording audio, then tap REC again.';
+    } else if (r['ok'] != true) {
+      recordingMessage = '${r['error'] ?? 'Could not start recording.'}';
+    } else {
+      recording = true;
+      recordingSeconds = 0;
+      _recordPoll?.cancel();
+      _recordPoll = Timer.periodic(const Duration(seconds: 1), (_) => _pollRecording());
+    }
+    notifyListeners();
+  }
+
+  Future<void> _pollRecording() async {
+    final s = await MixRecorder.status();
+    recordingSeconds = (s['seconds'] as num?)?.toDouble() ?? recordingSeconds;
+    // The input died (unplugged): save what there is.
+    if (recording && s['recording'] == false) {
+      await _stopRecording();
+      return;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _stopRecording() async {
+    _recordPoll?.cancel();
+    _recordPoll = null;
+    recording = false;
+    recordingSaving = true;
+    notifyListeners();
+    final r = await MixRecorder.stop();
+    recordingSaving = false;
+    recordingMessage = r['ok'] == true
+        ? 'Saved "${r['name']}" to ${r['where']}'
+              '${'${r['error'] ?? ''}'.isEmpty ? '' : ' (${r['error']})'}'
+        : '${r['error'] ?? 'Could not save the recording.'}';
+    notifyListeners();
+  }
+
+  /// A take left behind by a crash or a killed app is saved on the next start.
+  Future<void> _recoverRecording() async {
+    if (!Platform.isAndroid) return;
+    final r = await MixRecorder.recover();
+    if (r['ok'] == true) {
+      recordingMessage = 'Saved an unfinished recording, "${r['name']}", to ${r['where']}';
+      notifyListeners();
+    }
   }
 
   /// The GRID button (grid fix tools), off by default: grids are fixed while
@@ -1315,6 +1390,9 @@ class DjController extends ChangeNotifier {
   @override
   void dispose() {
     _usbSub?.cancel();
+    _recordPoll?.cancel();
+    // Save a take still running when the app closes.
+    if (recording) MixRecorder.stop();
     _ticker.cancel();
     _nudgeHold[0]?.cancel();
     _nudgeHold[1]?.cancel();

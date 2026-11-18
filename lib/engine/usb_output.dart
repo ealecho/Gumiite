@@ -65,6 +65,17 @@ class UsbOutput {
     return trimmed.isEmpty ? 'mixer' : trimmed;
   }
 
+  /// Debug: record [seconds] from the USB mixer's input to a WAV in the app's
+  /// files and return each channel's levels (see UsbInputTest.kt).
+  static Future<Map<String, dynamic>> testInput({int seconds = 10}) async {
+    try {
+      final raw = await _ch.invokeMethod<Map<dynamic, dynamic>>('testUsbInput', {'seconds': seconds});
+      return {for (final e in (raw ?? const {}).entries) '${e.key}': e.value};
+    } catch (e) {
+      return {'ok': false, 'error': '$e'};
+    }
+  }
+
   static Stream<UsbHotplugEvent>? _hotplug;
 
   static Stream<UsbHotplugEvent> events() {
