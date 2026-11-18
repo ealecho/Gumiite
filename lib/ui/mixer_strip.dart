@@ -323,15 +323,58 @@ class _CenterDetentSliderState extends State<CenterDetentSlider> {
     _leftCenter = false;
   }
 
+  // Double-tap resets to the centre (flat EQ, filter off, crossfader in the
+  // middle). Raw pointers rather than a double-tap recognizer, so the
+  // slider's own tap and drag don't wait to see if a second tap follows.
+  static const _doubleTapGap = Duration(milliseconds: 300);
+  static const _tapSlop = 18.0;
+  Offset _downAt = Offset.zero;
+  Duration _downTime = Duration.zero;
+  Duration? _lastTapUp;
+  Offset _lastTapAt = Offset.zero;
+
+  void _pointerDown(PointerDownEvent e) {
+    _downAt = e.position;
+    _downTime = e.timeStamp;
+  }
+
+  void _pointerUp(PointerUpEvent e) {
+    final isTap = (e.position - _downAt).distance < _tapSlop &&
+        e.timeStamp - _downTime < const Duration(milliseconds: 250);
+    if (!isTap) {
+      _lastTapUp = null;
+      return;
+    }
+    final last = _lastTapUp;
+    if (last != null &&
+        e.timeStamp - last < _doubleTapGap &&
+        (e.position - _lastTapAt).distance < _tapSlop * 2) {
+      _lastTapUp = null;
+      HapticFeedback.mediumImpact();
+      // After the slider has handled this tap's own jump.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onChanged(_mid);
+      });
+      widget.onChanged(_mid);
+      return;
+    }
+    _lastTapUp = e.timeStamp;
+    _lastTapAt = e.position;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Slider(
-      value: widget.value.clamp(widget.min, widget.max),
-      min: widget.min,
-      max: widget.max,
-      onChangeStart: _onChangeStart,
-      onChanged: _onChanged,
-      onChangeEnd: _onChangeEnd,
+    return Listener(
+      onPointerDown: _pointerDown,
+      onPointerUp: _pointerUp,
+      child: Slider(
+        value: widget.value.clamp(widget.min, widget.max),
+        min: widget.min,
+        max: widget.max,
+        onChangeStart: _onChangeStart,
+        onChanged: _onChanged,
+        onChangeEnd: _onChangeEnd,
+      ),
     );
   }
 }
