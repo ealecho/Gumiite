@@ -113,6 +113,13 @@ class DeckPanel extends StatelessWidget {
         },
       );
     }
+    if (index == 0 && (controller.recording || controller.recordingSaving)) {
+      final plain = detail;
+      detail = Stack(
+        fit: StackFit.expand,
+        children: [plain, Positioned(top: 6, right: 8, child: _recTimer())],
+      );
+    }
     if (portrait) return _portraitBody(context, d, wave(WavePart.overview), detail);
     final rows = <Widget>[
       SizedBox(height: WaveformPainter.overviewH, child: wave(WavePart.overview)),
@@ -246,40 +253,31 @@ class DeckPanel extends StatelessWidget {
     return ColoredBox(color: SideDeckTheme.deckBg, child: body);
   }
 
-  /// Mix recording (deck B, by Settings): records the USB mixer's return,
-  /// its mix with effects, and saves it to Music/SideDeck on stop. Red with
-  /// the elapsed time while recording.
+  static const _recRed = Color(0xFFE53935);
+
+  /// Mix recording (deck B): records the USB mixer's return, its mix with
+  /// effects, and saves it to Music/SideDeck on stop. Lit red while
+  /// recording; the time shows on deck A's waveform (see [_recTimer]).
   Widget _recButton() {
     final rec = controller.recording;
     final saving = controller.recordingSaving;
-    final secs = controller.recordingSeconds.floor();
-    final h = secs ~/ 3600, m = (secs ~/ 60) % 60, sec = secs % 60;
-    String two(int v) => v.toString().padLeft(2, '0');
-    final time = h > 0 ? '$h:${two(m)}:${two(sec)}' : '${two(m)}:${two(sec)}';
-    const red = Color(0xFFE53935);
     final Widget label = saving
-        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5))
+        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
         : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 7,
-                height: 7,
+                width: 9,
+                height: 9,
                 decoration: BoxDecoration(
-                  color: rec ? Colors.white : red,
+                  color: rec ? Colors.white : _recRed,
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 4),
-              Text(
-                rec ? time : 'REC',
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
-                  color: Colors.white,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
+              const SizedBox(width: 5),
+              const Text(
+                'REC',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: Colors.white),
               ),
             ],
           );
@@ -289,12 +287,38 @@ class DeckPanel extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: saving ? null : controller.toggleRecording,
         child: Container(
-          height: 20,
-          constraints: const BoxConstraints(minWidth: 40),
-          padding: const EdgeInsets.symmetric(horizontal: 5),
+          width: 52,
+          height: 28,
           alignment: Alignment.center,
-          decoration: rec ? SideDeckTheme.raised(tint: red) : SideDeckTheme.raised(),
+          decoration: rec ? SideDeckTheme.raised(tint: _recRed) : SideDeckTheme.raised(),
           child: label,
+        ),
+      ),
+    );
+  }
+
+  /// Recording time in red, top right of deck A's waveform.
+  Widget _recTimer() {
+    final secs = controller.recordingSeconds.floor();
+    final h = secs ~/ 3600, m = (secs ~/ 60) % 60, s = secs % 60;
+    String two(int v) => v.toString().padLeft(2, '0');
+    final time = h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xCC000000),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: Text(
+          controller.recordingSaving ? 'SAVING…' : '● REC $time',
+          style: const TextStyle(
+            color: _recRed,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            height: 1,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );
@@ -333,9 +357,8 @@ class DeckPanel extends StatelessWidget {
         child: Row(
           children: [
             tag,
-            // Shrinks to fit the narrow rail while it shows the time.
             if (index == 1) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: _recButton())),
               const SizedBox(width: 4),
             ],
