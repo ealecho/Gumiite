@@ -284,7 +284,7 @@ class WaveformPainter extends CustomPainter {
             style: TextStyle(
               color: _barLabel,
               fontFamily: SideDeckTheme.displayFont,
-              fontSize: SideDeckTheme.displayFont == null ? 13 : 15,
+              fontSize: 15,
               fontWeight: FontWeight.w800,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),

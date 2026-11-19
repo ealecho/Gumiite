@@ -669,9 +669,12 @@ class DeckPanel extends StatelessWidget {
   }
 
   // Doto's dots need a little more size than the platform font to read.
-  static TextStyle get _readoutStyle => SideDeckTheme.displayFont == null
-      ? const TextStyle(fontSize: 12.5, fontFeatures: [FontFeature.tabularFigures()], height: 1)
-      : TextStyle(fontFamily: SideDeckTheme.displayFont, fontSize: 14, fontWeight: FontWeight.w700, height: 1);
+  static const _readoutStyle = TextStyle(
+    fontFamily: SideDeckTheme.displayFont,
+    fontSize: 14,
+    fontWeight: FontWeight.w700,
+    height: 1,
+  );
 
   Widget _mono(String s, Color color) => Text(s, style: _readoutStyle.copyWith(color: color));
 

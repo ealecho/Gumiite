@@ -361,10 +361,10 @@ class SideDeckTheme {
   static Color get wellFill => _p.wellFill;
   static Color get wellEdge => _p.wellEdge;
 
-  /// Flat looks set text in Space Mono and readouts (times, tempo, bars) in
-  /// Doto's dot matrix; Classic keeps the platform font.
-  static String? get bodyFont => _p.flat ? 'SpaceMono' : null;
-  static String? get displayFont => _p.flat ? 'Doto' : null;
+  /// Every look sets text in Space Mono and readouts (times, tempo, bars)
+  /// in Doto's dot matrix.
+  static const bodyFont = 'SpaceMono';
+  static const displayFont = 'Doto';
 
   /// Text and icons on an unlit button face.
   static Color get buttonText => _p.flat ? _p.deckText : Colors.white;
