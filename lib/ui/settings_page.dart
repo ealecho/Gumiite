@@ -51,7 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       '${r['device']} · ${r['sampleRate']} Hz · '
                       '${r['float'] == true ? '32-bit float' : '16-bit'} · '
                       '${(r['seconds'] as num).toStringAsFixed(1)} s',
-                      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12),
+                      style: TextStyle(color: SideDeckTheme.muted, fontSize: 12),
                     ),
                     const SizedBox(height: 10),
                     for (var i = 0; i < peak.length; i++)
@@ -65,7 +65,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 10),
                     Text(
                       'Saved to ${r['path']}',
-                      style: const TextStyle(color: SideDeckTheme.muted, fontSize: 11),
+                      style: TextStyle(color: SideDeckTheme.muted, fontSize: 11),
                     ),
                   ],
                 )
@@ -131,11 +131,35 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
+            'Look',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Classic is the original dark deck. Paper and Ink are flat and '
+            'minimal, after fm1-sampler: ink on paper (or white on black) with '
+            'one orange for whatever is live.',
+            style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<SdLook>(
+            showSelectedIcon: false,
+            segments: [
+              for (final l in SdLook.values) ButtonSegment(value: l, label: Text(l.label)),
+            ],
+            selected: {SideDeckTheme.look.value},
+            onSelectionChanged: (s) async {
+              await SideDeckTheme.setLook(s.first);
+              if (mounted) setState(() {});
+            },
+          ),
+          const SizedBox(height: 24),
+          const Text(
             'External mixer',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Turn this on with a USB mixer plugged into the phone. Deck A and Deck B '
             'go out as separate channels so you mix and cue on the hardware — the '
             'on-screen EQ/crossfader hides. Works with devices such as the EP-136 '
@@ -173,7 +197,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.mic_external_on_outlined),
               title: const Text('Test USB input (1 min)'),
-              subtitle: const Text(
+              subtitle: Text(
                 'Debug: records a minute from the mixer\'s USB input, every channel, '
                 'and shows each one\'s level. Play a deck with a mixer effect on while it runs.',
                 style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -185,7 +209,7 @@ class _SettingsPageState extends State<SettingsPage> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.piano_outlined),
               title: const Text('Test MIDI input'),
-              subtitle: const Text(
+              subtitle: Text(
                 'Debug: shows every MIDI message the mixer sends as you press its buttons '
                 'and turn its knobs (K.O.: USB mode Multi, MIDI on).',
                 style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -200,7 +224,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Controls shown in the phone\'s own mixer, used when no external mixer '
             'is connected.',
             style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -208,7 +232,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Filter'),
-            subtitle: const Text(
+            subtitle: Text(
               'A FILT fader per deck: down for low-pass, up for high-pass. '
               'Turning it off resets both filters.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -225,7 +249,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Upright, the decks stack with their buttons on the outside and the '
             'waveforms meeting in the middle. Auto turns with the phone and keeps to '
             'its rotation lock.',
@@ -260,7 +284,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Hot cue pads (A–D)'),
-            subtitle: const Text(
+            subtitle: Text(
               'The four hot cue buttons on each deck. Off gives the row more room; '
               'cues already set still show on the waveforms.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -274,7 +298,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('GRID button'),
-            subtitle: const Text(
+            subtitle: Text(
               'The beat grid fix tools (beat here, bar here, BPM, tap, undo). For '
               'preparing tracks before a set; off keeps the deck row clear.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -292,7 +316,7 @@ class _SettingsPageState extends State<SettingsPage> {
               'Hidden, quantize stays as it is: '
               '${widget.dj.deckA.quantize && widget.dj.deckB.quantize ? 'on' : 'as last set'} '
               '(cues, hot cues and loops snap to the beat).',
-              style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
             ),
             value: widget.dj.showQuantizeButton,
             onChanged: (v) async {
@@ -303,7 +327,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Auto cue'),
-            subtitle: const Text(
+            subtitle: Text(
               'On load, the cue sits on the first beat where the music starts, '
               'skipping any silence, as on a CDJ. A cue you set yourself is kept instead.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -323,7 +347,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Full waveform'),
-            subtitle: const Text(
+            subtitle: Text(
               'Both decks\' scrolling waveforms drawn full, mirrored round their middle. '
               'Off: half waveforms, deck A rising and deck B hanging from the centre line.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -337,7 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Track sections'),
-            subtitle: const Text(
+            subtitle: Text(
               'INTRO, BREAK, DROP and OUTRO marked on the waveforms, found from where '
               'the bass drops out and comes back. The bar counter counts down to the '
               'next one. Follows the beat grid, so fix the grid first if they look off.',
@@ -358,7 +382,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Key lock'),
-            subtitle: const Text(
+            subtitle: Text(
               'Keeps the pitch when the tempo changes. Off: pitch follows tempo like '
               'a turntable. Both decks; the KEY button on the tempo fader sets one.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -372,7 +396,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Tempo fader on the deck rails'),
-            subtitle: const Text(
+            subtitle: Text(
               'A fader per deck (double-tap to reset) with KEY above it and its range '
               'below (±8 / ±16 / ±50 %). Off saves room; − / + and SYNC still set tempo.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
@@ -386,7 +410,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Pull the fader down to speed up'),
-            subtitle: const Text(
+            subtitle: Text(
               'As on a CDJ. Off: push it up to speed up.',
               style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
             ),
@@ -402,7 +426,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'How track keys appear on the decks and in the library.',
             style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
           ),
@@ -429,7 +453,7 @@ class _SettingsPageState extends State<SettingsPage> {
               '(${DjController.autoGainTargetDb.toStringAsFixed(0)} dBFS for the loud parts, '
               'never pushing the peak to clipping), so a mix doesn\'t jump between '
               'quiet and hot masters. The applied gain shows on each deck.',
-              style: const TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
+              style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
             ),
             value: widget.dj.autoGain,
             onChanged: (v) async {
@@ -443,7 +467,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Optional. Tracks download to a local cache, then play like local files. '
             'Use http:// for a server on your LAN. Use https:// if the server is '
             'on the internet — otherwise the login token travels in the clear.',
@@ -496,7 +520,7 @@ class _SettingsPageState extends State<SettingsPage> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'SideDeck 1.1.0\n'
             'Copyright © 2026 SideDeck contributors\n\n'
             'This program is free software under the GNU GPL v3 or later. '

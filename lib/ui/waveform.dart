@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:sidedeck/engine/sections.dart';
+import 'package:sidedeck/theme/sidedeck_theme.dart';
 
 /// 3-band DJ waveform after rbxport (https://github.com/chrisle/rbxport,
 /// GPL-2.0-or-later): overview strip plus a scrolling detail with the playhead
@@ -86,7 +87,7 @@ class WaveformPainter extends CustomPainter {
   static String hotCueLabel(int slot) => String.fromCharCode(0x41 + slot);
 
   static const overviewH = 26.0;
-  static const _cue = Color(0xFFEA3323);
+  static Color get _cue => SideDeckTheme.p.cue;
   static const _detailHeadroom = 0.82;
   static const _overviewWaveH = 19.0;
   static const _positionBarH = 3.0;
@@ -102,15 +103,17 @@ class WaveformPainter extends CustomPainter {
     7: Color(0xFFF5EBD7),
   };
   static const _silence = Color(0xFFD2DCFA);
-  static const _bg = Color(0xFF000000);
-  static const _playhead = Color(0xFFE0E0E0);
-  static const _beat = Color(0xFF4C4C4C);
-  static const _beatHead = Color(0xFF7C7C7C);
-  static const _downbeat = Color(0xFFFFFFFF);
-  static const _downbeatHead = Color(0xFFEA3323);
-  static const _loop = Color(0xFF3571E3);
-  static const _barRim = Color(0xFF6B6B6B);
-  static const _barPlayed = Color(0xFFC8C8C8);
+  // The rest follow the look (SideDeckTheme); Classic keeps rbxport's.
+  static SdPalette get _p => SideDeckTheme.p;
+  static Color get _bg => _p.waveBg;
+  static Color get _playhead => _p.playhead;
+  static Color get _beat => _p.beat;
+  static Color get _beatHead => _p.beatHead;
+  static Color get _downbeat => _p.downbeat;
+  static Color get _downbeatHead => _p.downbeatHead;
+  static Color get _loop => _p.loop.withValues(alpha: _p.loopAlpha);
+  static Color get _barRim => _p.barRim;
+  static Color get _barPlayed => _p.barPlayed;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -153,7 +156,9 @@ class WaveformPainter extends CustomPainter {
       }
     }
     final cols = overview.length ~/ 3;
-    if (cols > 0) {
+    if (cols > 0 && _p.flat) {
+      _paintOverviewFlat(canvas, width, base, cols);
+    } else if (cols > 0) {
       // Overview means run low on long tracks; scale so the loudest column fills the strip.
       var norm = 0.0;
       for (var c = 0; c < cols; c++) {
@@ -195,7 +200,7 @@ class WaveformPainter extends CustomPainter {
       final x1 = (loopEnd / duration * width).clamp(0.0, width);
       canvas.drawRect(
         Rect.fromLTRB(x0, waveTop, x1, base),
-        Paint()..color = _loop.withValues(alpha: 0.38),
+        Paint()..color = _loop,
       );
     }
 
@@ -239,7 +244,7 @@ class WaveformPainter extends CustomPainter {
   }
 
   static const _phraseBars = 8;
-  static const _barLabel = Color(0xFF367BDA);
+  static Color get _barLabel => _p.barLabel;
 
   /// rbxport-style bar count left of the playhead, plus the bars left until
   /// the next 8-bar phrase: "33.2 ▸3". Bar 1 is the grid's first beat, so it
@@ -261,6 +266,7 @@ class WaveformPainter extends CustomPainter {
         next = TextSpan(
           text: '  ${s.kind.label} $barsTo',
           style: TextStyle(
+            fontFamily: SideDeckTheme.bodyFont,
             color: sectionColours[s.kind],
             fontSize: 11,
             fontWeight: FontWeight.w800,
@@ -275,17 +281,19 @@ class WaveformPainter extends CustomPainter {
         children: [
           TextSpan(
             text: '$bar.$beat',
-            style: const TextStyle(
+            style: TextStyle(
               color: _barLabel,
-              fontSize: 13,
+              fontFamily: SideDeckTheme.displayFont,
+              fontSize: SideDeckTheme.displayFont == null ? 13 : 15,
               fontWeight: FontWeight.w800,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
           TextSpan(
             text: '  ▸$toPhrase',
             style: TextStyle(
-              color: toPhrase == 1 ? _downbeatHead : const Color(0xFF9A9A9A),
+              fontFamily: SideDeckTheme.bodyFont,
+              color: toPhrase == 1 ? _downbeatHead : _p.phraseText,
               fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
@@ -303,7 +311,7 @@ class WaveformPainter extends CustomPainter {
     final boxTop = hangDown ? bottom - 18 - boxH : top + 18;
     canvas.drawRRect(
       RRect.fromRectAndRadius(Rect.fromLTWH(left, boxTop, boxW, boxH), const Radius.circular(2)),
-      Paint()..color = const Color(0xCC000000),
+      Paint()..color = _p.scrim,
     );
     tp.paint(canvas, Offset(left + padX, boxTop + padY));
   }
@@ -327,7 +335,7 @@ class WaveformPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: hotCueLabel(slot),
-        style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800, height: 1),
+        style: TextStyle(fontFamily: SideDeckTheme.bodyFont, color: Colors.black, fontSize: 10, fontWeight: FontWeight.w800, height: 1),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -351,7 +359,8 @@ class WaveformPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: kind.label,
-        style: const TextStyle(
+        style: TextStyle(
+          fontFamily: SideDeckTheme.bodyFont,
           color: Colors.black,
           fontSize: 9,
           fontWeight: FontWeight.w800,
@@ -418,7 +427,9 @@ class WaveformPainter extends CustomPainter {
     }
 
     final cols = detail.length ~/ 3;
-    if (cols > 0) {
+    if (cols > 0 && _p.flat) {
+      _paintDetailFlat(canvas, width, base, dir, full, viewStart, viewDur, cols);
+    } else if (cols > 0) {
       final paths = <int, Path>{for (final k in _bandColours.keys) k: Path()};
       final silence = Path();
       final colsPerPx = viewDur * columnsPerSec / width;
@@ -448,7 +459,7 @@ class WaveformPainter extends CustomPainter {
       if (x1 > x0) {
         canvas.drawRect(
           Rect.fromLTRB(x0, top, x1, bottom),
-          Paint()..color = _loop.withValues(alpha: 0.38),
+          Paint()..color = _loop,
         );
       }
     }
@@ -468,6 +479,78 @@ class WaveformPainter extends CustomPainter {
       Paint()..color = _playhead,
     );
     canvas.restore();
+  }
+
+  /// Flat looks (after fm1-sampler): one bar per pixel pair, its height the
+  /// loudest band, ink where the track has played and dim where it is to
+  /// come.
+  void _paintOverviewFlat(Canvas canvas, double width, double base, int cols) {
+    var norm = 0.0;
+    for (var c = 0; c < cols; c++) {
+      norm = math.max(norm, overview[c * 3] / 128);
+      norm = math.max(norm, overview[c * 3 + 1] / 256);
+      norm = math.max(norm, overview[c * 3 + 2] / 256);
+    }
+    final fill = norm > 0 ? 1 / norm : 1.0;
+    final playedX = (position / duration).clamp(0.0, 1.0) * width;
+    final played = Path(), ahead = Path();
+    for (var px = 0; px < width; px += 2) {
+      final c0 = (px * cols / width).floor();
+      final c1 = math.max(c0 + 1, ((px + 2) * cols / width).floor()).clamp(0, cols);
+      var v = 0.0;
+      for (var c = c0; c < c1; c++) {
+        v = math.max(v, overview[c * 3] / 128);
+        v = math.max(v, overview[c * 3 + 1] / 256);
+        v = math.max(v, overview[c * 3 + 2] / 256);
+      }
+      final hh = math.max(1.0, math.min(v * fill, 1.0) * _overviewWaveH);
+      (px < playedX ? played : ahead).addRect(Rect.fromLTRB(px.toDouble(), base - hh, px + 1.2, base));
+    }
+    canvas.drawPath(played, Paint()..color = _p.waveInk);
+    canvas.drawPath(ahead, Paint()..color = _p.waveDim);
+  }
+
+  /// Flat detail: bars a few pixels apart, each as tall as the loudest band
+  /// under it, ink before the playhead and dim after. A bar spans a fixed
+  /// stretch of the track for a given zoom, so bars scroll with the music
+  /// instead of shimmering.
+  void _paintDetailFlat(
+    Canvas canvas,
+    double width,
+    double base,
+    double dir,
+    double full,
+    double viewStart,
+    double viewDur,
+    int cols,
+  ) {
+    const pitchPx = 3.0;
+    final barSec = zoomWindowSec * pitchPx / width;
+    if (barSec <= 0) return;
+    final pxPerSec = width / viewDur;
+    final barW = barSec * pxPerSec * 0.62;
+    final span = barSec * columnsPerSec;
+    final played = Path(), ahead = Path();
+    final k0 = (math.max(0.0, viewStart) / barSec).floor();
+    final k1 = (math.min(duration, viewStart + viewDur) / barSec).ceil();
+    for (var k = k0; k < k1; k++) {
+      final t0 = k * barSec;
+      final v = span >= 1
+          ? _maxOver(t0 * columnsPerSec, span, cols)
+          : _interpolate((t0 + barSec / 2) * columnsPerSec, cols);
+      final loud = math.max(v.$1, math.max(v.$2, v.$3));
+      final reach = math.max(1.0, loud / 127 * full * _detailHeadroom);
+      final x = (t0 - viewStart) * pxPerSec;
+      final path = t0 + barSec / 2 < position ? played : ahead;
+      final y = base + dir * reach;
+      path.addRect(Rect.fromLTRB(x, math.min(base, y), x + barW, math.max(base, y)));
+      if (fullWave) {
+        final y2 = base - dir * reach;
+        path.addRect(Rect.fromLTRB(x, math.min(base, y2), x + barW, math.max(base, y2)));
+      }
+    }
+    canvas.drawPath(played, Paint()..color = _p.waveInk);
+    canvas.drawPath(ahead, Paint()..color = _p.waveDim);
   }
 
   /// Per-band maximum over the columns covered by one pixel.

@@ -171,7 +171,7 @@ class _MidiTestPageState extends State<MidiTestPage> {
     super.dispose();
   }
 
-  static const _small = TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4);
+  static TextStyle get _small => TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4);
   static const _mono = TextStyle(fontFeatures: [FontFeature.tabularFigures()], fontSize: 13);
 
   String _clock(DateTime t) =>
@@ -236,7 +236,7 @@ class _MidiTestPageState extends State<MidiTestPage> {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Press and turn each control on the mixer, then again while holding SELECT. '
             'Note whether the mixer itself also reacts (volume, cue light, effect).',
             style: _small,
@@ -245,7 +245,7 @@ class _MidiTestPageState extends State<MidiTestPage> {
           Text('Controls (${_order.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           if (_order.isEmpty)
-            const Text('Nothing received yet.', style: _small)
+            Text('Nothing received yet.', style: _small)
           else
             for (final k in _order) _controlRow(_controls[k]!),
           const Divider(height: 28),

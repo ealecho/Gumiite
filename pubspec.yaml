@@ -25,3 +25,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Paper and Ink looks (SideDeckTheme): Space Mono for text, Doto (static
+  # instances of the variable font, square dots) for readouts. Both OFL;
+  # licences beside them.
+  fonts:
+    - family: SpaceMono
+      fonts:
+        - asset: assets/fonts/SpaceMono-Regular.ttf
+        - asset: assets/fonts/SpaceMono-Bold.ttf
+          weight: 700
+    - family: Doto
+      fonts:
+        - asset: assets/fonts/Doto-Regular.ttf
+        - asset: assets/fonts/Doto-Bold.ttf
+          weight: 700

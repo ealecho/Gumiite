@@ -17,7 +17,7 @@ class MixerStrip extends StatelessWidget {
   /// Collapses the strip so the decks get the screen (see HomePage).
   final VoidCallback? onHide;
 
-  static const _label = TextStyle(
+  static TextStyle get _label => TextStyle(
     fontSize: 9,
     fontWeight: FontWeight.w700,
     letterSpacing: 0.8,
@@ -59,10 +59,10 @@ class MixerStrip extends StatelessWidget {
                   visualDensity: VisualDensity.compact,
                   constraints: const BoxConstraints.tightFor(width: 40, height: 22),
                   onPressed: onHide,
-                  icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: SideDeckTheme.deckDim),
+                  icon: Icon(Icons.keyboard_arrow_down, size: 20, color: SideDeckTheme.deckDim),
                 ),
         ),
-        const Text('CROSSFADER', style: _label),
+        Text('CROSSFADER', style: _label),
         Expanded(
           child: Row(
             children: [
@@ -106,7 +106,7 @@ class MixerStrip extends StatelessWidget {
       ),
       child: Text(
         deck == 0 ? 'A' : 'B',
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: SideDeckTheme.deckBg, height: 1),
       ),
     );
   }
@@ -187,8 +187,8 @@ class MixerStrip extends StatelessWidget {
 class _CenterFillTrack extends SliderTrackShape with BaseSliderTrackShape {
   const _CenterFillTrack();
 
-  static const _rail = Color(0xFF050505);
-  static const _notch = Color(0xFF8A8A8A);
+  static Color get _rail => SideDeckTheme.p.rail;
+  static Color get _notch => SideDeckTheme.p.notch;
 
   @override
   void paint(
@@ -256,6 +256,16 @@ class _FaderThumb extends SliderComponentShape {
     final canvas = context.canvas;
     final rect = Rect.fromCenter(center: center, width: length, height: width);
     final body = RRect.fromRectAndRadius(rect, const Radius.circular(2));
+    final p = SideDeckTheme.p;
+    if (p.flat) {
+      // A solid ink block with a paper line: no shadow, no shading.
+      canvas.drawRRect(body, Paint()..color = p.capFill);
+      canvas.drawRect(
+        Rect.fromCenter(center: center, width: 2, height: width - 6),
+        Paint()..color = p.capLine,
+      );
+      return;
+    }
     // Drop shadow, a cap shaded across its grip, a bright centre line.
     canvas.drawRRect(
       body.shift(const Offset(0, 1.5)),
@@ -483,8 +493,9 @@ class _FaderWell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Flat looks have no wells, only the ticks.
     return DecoratedBox(
-      decoration: SideDeckTheme.recessed(),
+      decoration: SideDeckTheme.flat ? const BoxDecoration() : SideDeckTheme.recessed(),
       child: CustomPaint(painter: _TickPainter(vertical: vertical), child: child),
     );
   }
@@ -499,7 +510,7 @@ class _TickPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF4A4A4A)
+      ..color = SideDeckTheme.p.tick
       ..strokeWidth = 1;
     final along = vertical ? size.height : size.width;
     final across = vertical ? size.width : size.height;

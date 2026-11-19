@@ -186,14 +186,14 @@ class _TrackInfoDialogState extends State<_TrackInfoDialog> {
                     decoration: BoxDecoration(color: tag, borderRadius: BorderRadius.circular(2)),
                     child: Text(
                       deckName,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: SideDeckTheme.deckBg, height: 1),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: SelectableText(
                       d.loaded ? d.title : 'No track loaded',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
                     ),
                   ),
                   IconButton(
@@ -218,7 +218,7 @@ class _TrackInfoDialogState extends State<_TrackInfoDialog> {
                                 padding: const EdgeInsets.only(right: 16, bottom: 6),
                                 child: Text(
                                   label.toUpperCase(),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.8,
@@ -231,7 +231,7 @@ class _TrackInfoDialogState extends State<_TrackInfoDialog> {
                                 padding: const EdgeInsets.only(bottom: 6),
                                 child: SelectableText(
                                   value,
-                                  style: const TextStyle(fontSize: 13, color: SideDeckTheme.deckText),
+                                  style: TextStyle(fontSize: 13, color: SideDeckTheme.deckText),
                                 ),
                               ),
                             ],

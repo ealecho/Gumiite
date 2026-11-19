@@ -20,7 +20,7 @@ void main() {
           padding: const EdgeInsets.all(24),
           child: Text(
             'UI error\n\n${details.exceptionAsString()}\n\n${details.stack}',
-            style: const TextStyle(
+            style: TextStyle(
               color: SideDeckTheme.text,
               fontSize: 13,
               fontFamily: 'Courier',
@@ -42,7 +42,10 @@ void main() {
   };
 
   runZonedGuarded(
-    () => runApp(const SideDeckApp()),
+    () async {
+      await SideDeckTheme.loadLook();
+      runApp(const SideDeckApp());
+    },
     (error, stack) {
       bootFatalError = '$error\n$stack';
       runApp(_FatalApp(message: bootFatalError!));
@@ -55,11 +58,15 @@ class SideDeckApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SideDeck',
-      debugShowCheckedModeBanner: false,
-      theme: SideDeckTheme.dark(),
-      home: const HomePage(),
+    return ValueListenableBuilder<SdLook>(
+      valueListenable: SideDeckTheme.look,
+      builder: (context, look, home) => MaterialApp(
+        title: 'SideDeck',
+        debugShowCheckedModeBanner: false,
+        theme: SideDeckTheme.theme(),
+        home: home,
+      ),
+      child: const HomePage(),
     );
   }
 }
@@ -73,7 +80,7 @@ class _FatalApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: SideDeckTheme.dark(),
+      theme: SideDeckTheme.theme(),
       home: Scaffold(
         backgroundColor: SideDeckTheme.bg,
         body: SafeArea(
@@ -81,7 +88,7 @@ class _FatalApp extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             child: Text(
               'SideDeck failed to start\n\n$message',
-              style: const TextStyle(
+              style: TextStyle(
                 color: SideDeckTheme.text,
                 fontSize: 13,
                 fontFamily: 'Courier',

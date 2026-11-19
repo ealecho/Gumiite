@@ -170,7 +170,7 @@ class DeckPanel extends StatelessWidget {
                   ? _title(d)
                   : Text(
                       'Deck ${index == 0 ? 'A' : 'B'} — tap to load a track',
-                      style: const TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
+                      style: TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
                     ),
             ),
           ),
@@ -253,7 +253,7 @@ class DeckPanel extends StatelessWidget {
     return ColoredBox(color: SideDeckTheme.deckBg, child: body);
   }
 
-  static const _recRed = Color(0xFFE53935);
+  static Color get _recRed => SideDeckTheme.p.rec;
 
   /// Mix recording (deck B): records the USB mixer's return, its mix with
   /// effects, and saves it to Music/SideDeck on stop. Lit red while
@@ -270,14 +270,19 @@ class DeckPanel extends StatelessWidget {
                 width: 9,
                 height: 9,
                 decoration: BoxDecoration(
-                  color: rec ? Colors.white : _recRed,
+                  color: rec ? SideDeckTheme.p.onLit : _recRed,
                   shape: BoxShape.circle,
                 ),
               ),
               const SizedBox(width: 5),
-              const Text(
+              Text(
                 'REC',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, height: 1, color: Colors.white),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  height: 1,
+                  color: rec ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText,
+                ),
               ),
             ],
           );
@@ -307,17 +312,18 @@ class DeckPanel extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
-          color: const Color(0xCC000000),
+          color: SideDeckTheme.p.scrim,
           borderRadius: BorderRadius.circular(3),
         ),
         child: Text(
           controller.recordingSaving ? 'SAVING…' : '● REC $time',
-          style: const TextStyle(
+          style: TextStyle(
             color: _recRed,
+            fontFamily: SideDeckTheme.displayFont,
             fontSize: 14,
             fontWeight: FontWeight.w800,
             height: 1,
-            fontFeatures: [FontFeature.tabularFigures()],
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ),
@@ -331,7 +337,7 @@ class DeckPanel extends StatelessWidget {
     decoration: BoxDecoration(color: _tagColor, borderRadius: BorderRadius.circular(2)),
     child: Text(
       index == 0 ? 'A' : 'B',
-      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: SideDeckTheme.deckBg, height: 1),
     ),
   );
 
@@ -343,7 +349,7 @@ class DeckPanel extends StatelessWidget {
       decoration: BoxDecoration(color: _tagColor, borderRadius: BorderRadius.circular(2)),
       child: Text(
         index == 0 ? 'A' : 'B',
-        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black, height: 1),
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: SideDeckTheme.deckBg, height: 1),
       ),
     );
     // Library on deck A's rail, settings on deck B's: the rails have room, and
@@ -461,7 +467,7 @@ class DeckPanel extends StatelessWidget {
       child: InkResponse(
         onTap: onTap,
         radius: 18,
-        child: Icon(icon, size: 20, color: const Color(0xFFA0A0A0)),
+        child: Icon(icon, size: 20, color: SideDeckTheme.p.icon),
       ),
     );
   }
@@ -475,7 +481,7 @@ class DeckPanel extends StatelessWidget {
     VoidCallback? onTap,
     VoidCallback? onStep,
   }) {
-    final fg = enabled ? Colors.white : SideDeckTheme.deckOutline;
+    final fg = !enabled ? SideDeckTheme.deckOutline : (lit ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText);
     final face = Container(
       width: 30,
       height: 24,
@@ -496,13 +502,15 @@ class DeckPanel extends StatelessWidget {
   /// CDJ-style CUE (see DjController.cueDown): reacts on press, and release
   /// ends a cue preview, so it is a raw pointer listener rather than a tap.
   Widget _cueButton(DeckState d) {
-    const ring = Color(0xFFEDB751);
+    final p = SideDeckTheme.p;
+    // Flat looks: an ink ring that fills orange while the cue previews.
+    final ring = p.flat && d.cuePreview ? p.deckLit : p.cueRing;
     final face = Container(
       width: 40,
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: d.cuePreview ? ring : Colors.black,
+        color: d.cuePreview ? ring : p.deckBg,
         shape: BoxShape.circle,
         border: Border.all(color: d.loaded ? ring : SideDeckTheme.deckOutline, width: 2),
       ),
@@ -511,7 +519,9 @@ class DeckPanel extends StatelessWidget {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: !d.loaded ? SideDeckTheme.deckOutline : (d.cuePreview ? Colors.black : Colors.white),
+          color: !d.loaded
+              ? SideDeckTheme.deckOutline
+              : (d.cuePreview ? (p.flat ? p.onLit : Colors.black) : SideDeckTheme.buttonText),
         ),
       ),
     );
@@ -526,10 +536,24 @@ class DeckPanel extends StatelessWidget {
 
   Widget _playButton(DeckState d) {
     final lit = d.playing;
-    final glyph = !d.loaded ? SideDeckTheme.deckOutline : (lit ? Colors.white : const Color(0xFFB4B4B4));
+    final p = SideDeckTheme.p;
+    // Flat looks: an ink ring, filled orange while playing.
+    final Color glyph;
+    if (!d.loaded) {
+      glyph = SideDeckTheme.deckOutline;
+    } else if (p.flat) {
+      glyph = lit ? p.onLit : p.deckText;
+    } else {
+      glyph = lit ? Colors.white : const Color(0xFFB4B4B4);
+    }
     return Material(
-      color: Colors.black,
-      shape: CircleBorder(side: BorderSide(color: lit ? SideDeckTheme.playLit : SideDeckTheme.playRing, width: 2)),
+      color: p.flat && lit ? p.playLit : p.deckBg,
+      shape: CircleBorder(
+        side: BorderSide(
+          color: !d.loaded && p.flat ? p.deckOutline : (lit ? p.playLit : p.playRing),
+          width: 2,
+        ),
+      ),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: d.loaded ? () => controller.playPause(index) : null,
@@ -550,7 +574,7 @@ class DeckPanel extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           'Deck ${index == 0 ? 'A' : 'B'} — tap to load a track',
-          style: const TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
+          style: TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
         ),
       );
     }
@@ -594,12 +618,12 @@ class DeckPanel extends StatelessWidget {
         children: [
           TextSpan(
             text: d.title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: SideDeckTheme.deckText),
           ),
           if (d.artist.isNotEmpty)
             TextSpan(
               text: '  ${d.artist}',
-              style: const TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
+              style: TextStyle(fontSize: 12, color: SideDeckTheme.deckDim),
             ),
         ],
       ),
@@ -644,7 +668,10 @@ class DeckPanel extends StatelessWidget {
     );
   }
 
-  static const _readoutStyle = TextStyle(fontSize: 12.5, fontFeatures: [FontFeature.tabularFigures()], height: 1);
+  // Doto's dots need a little more size than the platform font to read.
+  static TextStyle get _readoutStyle => SideDeckTheme.displayFont == null
+      ? const TextStyle(fontSize: 12.5, fontFeatures: [FontFeature.tabularFigures()], height: 1)
+      : TextStyle(fontFamily: SideDeckTheme.displayFont, fontSize: 14, fontWeight: FontWeight.w700, height: 1);
 
   Widget _mono(String s, Color color) => Text(s, style: _readoutStyle.copyWith(color: color));
 
@@ -877,7 +904,7 @@ class _NudgePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final p = Paint()
-      ..color = Colors.white.withValues(alpha: alpha)
+      ..color = SideDeckTheme.p.waveInk.withValues(alpha: alpha)
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     final c = size.center(Offset.zero);
@@ -927,7 +954,7 @@ class _DeckButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = !enabled
         ? SideDeckTheme.deckOutline
-        : (display && lit ? const Color(0xFF6FA0F5) : Colors.white);
+        : (display && lit ? SideDeckTheme.p.litText : (lit ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText));
     final Widget content;
     if (sub != null) {
       content = Column(
@@ -944,7 +971,7 @@ class _DeckButton extends StatelessWidget {
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
               height: 1.1,
-              color: lit ? Colors.white : SideDeckTheme.deckDim,
+              color: lit ? SideDeckTheme.p.onLit : SideDeckTheme.deckDim,
             ),
           ),
         ],
@@ -1052,8 +1079,8 @@ class _TempoFaderPainter extends CustomPainter {
   final bool downIsFaster;
   final bool enabled;
 
-  static const _rail = Color(0xFF323232);
-  static const _notch = Color(0xFF8A8A8A);
+  static Color get _rail => SideDeckTheme.flat ? SideDeckTheme.p.rail : const Color(0xFF323232);
+  static Color get _notch => SideDeckTheme.p.notch;
   static const _thumbH = 10.0;
 
   @override
@@ -1088,10 +1115,11 @@ class _TempoFaderPainter extends CustomPainter {
       Rect.fromCenter(center: Offset(cx, y), width: 20, height: _thumbH),
       const Radius.circular(2),
     );
-    canvas.drawRRect(body, Paint()..color = SideDeckTheme.deckOutline);
+    final flat = SideDeckTheme.flat;
+    canvas.drawRRect(body, Paint()..color = flat ? SideDeckTheme.p.capFill : SideDeckTheme.deckOutline);
     canvas.drawRect(
       Rect.fromCenter(center: Offset(cx, y), width: 14, height: 1.5),
-      Paint()..color = const Color(0xFFD0D0D0),
+      Paint()..color = flat ? SideDeckTheme.p.capLine : const Color(0xFFD0D0D0),
     );
   }
 

@@ -206,7 +206,7 @@ class _HomePageState extends State<HomePage> {
             padding: const EdgeInsets.all(24),
             child: SelectableText(
               'SideDeck failed to start\n\n$bootError',
-              style: const TextStyle(
+              style: TextStyle(
                 color: SideDeckTheme.text,
                 fontSize: 13,
                 fontFamily: 'Courier',
@@ -228,12 +228,12 @@ class _HomePageState extends State<HomePage> {
           backgroundColor: SideDeckTheme.deckRow,
           body: SafeArea(
             child: ColoredBox(
-              color: Colors.black,
+              color: SideDeckTheme.deckBg,
               child: Column(
                 children: [
                   Expanded(flex: 6, child: _deck(0, portrait)),
                   // Shared center line: deck A's detail rises to it, deck B's hangs from it.
-                  const SizedBox(height: 1, child: ColoredBox(color: Color(0xFF323232))),
+                  SizedBox(height: 1, child: ColoredBox(color: SideDeckTheme.p.divider)),
                   Expanded(flex: 6, child: _deck(1, portrait)),
                   // External mixer: the hardware mixes, so the decks get the whole screen.
                   if (!dj.externalMixer)
@@ -274,7 +274,7 @@ class _HomePageState extends State<HomePage> {
       color: SideDeckTheme.deckRow,
       child: InkWell(
         onTap: () => _setMixerHidden(false),
-        child: const SizedBox(
+        child: SizedBox(
           height: 22,
           width: double.infinity,
           child: Row(

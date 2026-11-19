@@ -79,7 +79,7 @@ class _BpmPadState extends State<_BpmPad> {
             child: Center(
               child: Text(
                 k,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: SideDeckTheme.buttonText),
               ),
             ),
           ),
@@ -118,14 +118,15 @@ class _BpmPadState extends State<_BpmPad> {
                       Text(
                         shown,
                         style: TextStyle(
+                          fontFamily: SideDeckTheme.displayFont,
                           fontSize: 44,
                           fontWeight: FontWeight.w800,
                           fontFeatures: const [FontFeature.tabularFigures()],
-                          color: _fresh ? SideDeckTheme.deckLit : Colors.white,
+                          color: _fresh ? SideDeckTheme.deckLit : SideDeckTheme.text,
                         ),
                       ),
                       const SizedBox(width: 6),
-                      const Text('BPM', style: TextStyle(fontSize: 14, color: SideDeckTheme.muted)),
+                      Text('BPM', style: TextStyle(fontSize: 14, color: SideDeckTheme.muted)),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -134,7 +135,7 @@ class _BpmPadState extends State<_BpmPad> {
                     '${_lo.toStringAsFixed(1)}–${_hi.toStringAsFixed(1)}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: ok || _text.isEmpty ? SideDeckTheme.muted : const Color(0xFFFF6B6B),
+                      color: ok || _text.isEmpty ? SideDeckTheme.muted : SideDeckTheme.p.error,
                     ),
                   ),
                   const SizedBox(height: 16),
