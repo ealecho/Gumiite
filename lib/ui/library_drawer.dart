@@ -62,10 +62,40 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
     _loadClient();
     _loadStick();
     widget.library.addListener(_onLib);
-    widget.dj.addListener(_onLib);
+    _djSeen = _djView();
+    widget.dj.addListener(_onDj);
   }
 
   void _onLib() {
+    if (mounted) setState(() {});
+  }
+
+  // The deck controller notifies 20 times a second while a deck plays (the
+  // playhead), and every rebuild here re-filters and re-sorts the whole
+  // library. Rebuild only when something this sheet shows has changed.
+  Object? _djSeen;
+
+  Object _djView() {
+    final dj = widget.dj;
+    final a = dj.deck(0);
+    final b = dj.deck(1);
+    return (
+      dj.loadingDeck,
+      dj.loadingPath,
+      dj.loadingTitle,
+      dj.engineError,
+      dj.history, // replaced, never edited in place
+      dj.playedPaths,
+      dj.keyNotation,
+      (a.loaded, a.key, a.bpm, a.path),
+      (b.loaded, b.key, b.bpm, b.path),
+    );
+  }
+
+  void _onDj() {
+    final view = _djView();
+    if (view == _djSeen) return;
+    _djSeen = view;
     if (mounted) setState(() {});
   }
 
@@ -79,7 +109,7 @@ class _LibraryOverlayState extends State<LibraryOverlay> {
   @override
   void dispose() {
     widget.library.removeListener(_onLib);
-    widget.dj.removeListener(_onLib);
+    widget.dj.removeListener(_onDj);
     _search.dispose();
     super.dispose();
   }

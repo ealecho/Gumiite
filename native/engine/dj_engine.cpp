@@ -43,8 +43,6 @@
 
 namespace {
 
-// ~10–20 ms per bin on typical tracks so the zoomed view has real transients.
-constexpr int kWaveformBins = 32768;
 constexpr int kHotCues = 4;
 constexpr int kMaxCallbackFrames = 2048;
 constexpr int kMaxStretchInFrames = kMaxCallbackFrames * 2 + 256;
@@ -120,8 +118,6 @@ struct Deck {
   float gate = 0.0f;
   bool pauseXf = false;
 
-  std::vector<float> waveMin;
-  std::vector<float> waveMax;
   std::vector<uint8_t> bandDetail;    // wave_bands::kDetailPerSec columns/s, low/mid/high
   std::vector<uint8_t> bandOverview;  // wave_bands::kOverviewColumns columns, low/mid/high
   TrackLevel level;                   // loudness and peak, for auto gain
@@ -196,9 +192,10 @@ struct Deck {
   // Every position you can jump to, re-hinted on each buffer so its chunk
   // stays resident in the cache. That is what makes a cue jump land on
   // decoded audio instead of waiting for the worker.
-  void hintAnchors() {
+  static constexpr int kMaxAnchorSpans = 3 + kHotCues;
+
+  int anchorSpans(ChunkCache::Span* spans) const {
     const int sr = std::max(1, sampleRate);
-    ChunkCache::Span spans[3 + kHotCues];
     int n = 0;
     spans[n++] = {(int64_t)(cuePoint * (double)sr), ChunkCache::kChunkFrames};
     for (const double hotcue : hotcues) {
@@ -215,14 +212,24 @@ struct Deck {
       spans[n++] = {loopEndFrame - ChunkCache::kChunkFrames,
                     ChunkCache::kChunkFrames * 2};
     }
-    cache.hintEngineSpans(spans, n);
+    return n;
   }
 
-  void hintHot() {
+  void hintAnchors() {
+    ChunkCache::Span spans[kMaxAnchorSpans];
+    cache.hintEngineSpans(spans, anchorSpans(spans));
+  }
+
+  // The next second from the playhead plus every anchor, in one batch.
+  // `fromAudio`: called from the render callback, which must not wait on the
+  // decoder thread's locks.
+  void hintHot(bool fromAudio = false) {
     const int sr = std::max(1, sampleRate);
     cache.setHotFrame((int64_t)playhead);
-    cache.hintEngineFrames((int64_t)playhead, sr);
-    hintAnchors();
+    ChunkCache::Span spans[1 + kMaxAnchorSpans];
+    spans[0] = {(int64_t)playhead, (int64_t)sr};
+    const int n = 1 + anchorSpans(spans + 1);
+    cache.hintEngineSpans(spans, n, false, fromAudio);
   }
 
   void commitJumpTo(double destFrames, bool shiftLoop = false, double loopDelta = 0.0) {
@@ -476,8 +483,10 @@ struct Engine {
         d.sampleRate = newSr;
         d.totalFrames = d.cache.engineFrames();
         d.flushStretcher();
+        // Rebuild for the new rate here, not in the first render: configuring
+        // Stretch allocates, which the audio thread must never do.
         d.stretcherReady = false;
-        d.stretcherSr = 0;
+        d.ensureStretcher();
         d.loaded = d.totalFrames > 1;
         d.playing = wasPlaying && d.loaded;
         d.hintHot();
@@ -559,7 +568,19 @@ struct Engine {
     const int newCh = stream->getChannelCount();
     engineSampleRate.store(newSr);
     engineChannels.store(newCh);
-    LOGI("stream open sr=%d ch=%d fmt=%s", newSr, newCh, oboe::convertToText(stream->getFormat()));
+    // Low-latency streams often start at two bursts of buffer, which leaves
+    // no room for a slow callback (a jump prime, a busy CPU). Three bursts is
+    // a few ms more latency and a lot more headroom. Never shrink it.
+    const int burst = stream->getFramesPerBurst();
+    if (burst > 0 && stream->getBufferSizeInFrames() < burst * 3) {
+      stream->setBufferSizeInFrames(burst * 3);
+    }
+    // Lets Android raise the CPU clock when callbacks run long (ADPF, where
+    // the device supports it; a no-op elsewhere).
+    stream->setPerformanceHintEnabled(true);
+    LOGI("stream open sr=%d ch=%d fmt=%s burst=%d buffer=%d/%d", newSr, newCh,
+         oboe::convertToText(stream->getFormat()), burst, stream->getBufferSizeInFrames(),
+         stream->getBufferCapacityInFrames());
 
     applyLoadedDeckSampleRate(newSr);
 
@@ -596,6 +617,21 @@ struct Engine {
     return true;
 #else
     return false;
+#endif
+  }
+
+  // Output underruns since the stream opened (-1: unknown). Android's
+  // internal stream only; the USB writer logs its own.
+  int xrunCount() {
+#ifdef __ANDROID__
+    std::unique_lock<std::mutex> lock(streamMutex, std::try_to_lock);
+    if (!lock.owns_lock() || !stream) {
+      return -1;
+    }
+    const auto r = stream->getXRunCount();
+    return r ? r.value() : -1;
+#else
+    return -1;
 #endif
   }
 
@@ -761,7 +797,7 @@ struct Engine {
         d.playing = false;
         d.playhead = (double)std::max(0, totalFrames - 1);
       }
-      d.hintHot();
+      d.hintHot(true);
       return;
     }
 
@@ -776,14 +812,26 @@ struct Engine {
       d.playing = false;
       d.playhead = (double)std::max(0, totalFrames - 1);
     }
-    d.hintHot();
+    d.hintHot(true);
   }
 
-  void renderInterleaved(float* out, int frames, int channels) {
+  // `clip` hard-limits to ±1. The USB writer passes false: it runs its own
+  // per-deck peak limiter, which can only act on peaks that reach it.
+  void renderInterleaved(float* out, int frames, int channels, bool clip = true) {
     if (out == nullptr || frames <= 0 || channels < 2) {
       return;
     }
-    const int n = std::min(frames, kMaxCallbackFrames);
+    // The mix and stretch buffers hold kMaxCallbackFrames, so a bigger
+    // callback (iOS can ask for 4096) is rendered in blocks, not cut short.
+    while (frames > 0) {
+      const int n = std::min(frames, kMaxCallbackFrames);
+      renderBlock(out, n, channels, clip);
+      out += (size_t)n * (size_t)channels;
+      frames -= n;
+    }
+  }
+
+  void renderBlock(float* out, int n, int channels, bool clip) {
     renderDeck(decks[0], mixAL.data(), mixAR.data(), n);
     renderDeck(decks[1], mixBL.data(), mixBR.data(), n);
 
@@ -793,14 +841,16 @@ struct Engine {
     xfaderGains(x, gainA, gainB);
     const float m = master.load();
     const bool split = outputMode.load() == 1 && channels >= 4;
+    const float lim = clip ? 1.0f : 1.0e30f;
+    auto sat = [lim](float v) { return std::max(-lim, std::min(lim, v)); };
 
     if (split) {
       for (int i = 0; i < n; ++i) {
         const int base = i * channels;
-        out[base + 0] = std::max(-1.0f, std::min(1.0f, mixAL[i] * m));
-        out[base + 1] = std::max(-1.0f, std::min(1.0f, mixAR[i] * m));
-        out[base + 2] = std::max(-1.0f, std::min(1.0f, mixBL[i] * m));
-        out[base + 3] = std::max(-1.0f, std::min(1.0f, mixBR[i] * m));
+        out[base + 0] = sat(mixAL[i] * m);
+        out[base + 1] = sat(mixAR[i] * m);
+        out[base + 2] = sat(mixBL[i] * m);
+        out[base + 3] = sat(mixBR[i] * m);
         for (int c = 4; c < channels; ++c) {
           out[base + c] = 0.0f;
         }
@@ -809,15 +859,12 @@ struct Engine {
       for (int i = 0; i < n; ++i) {
         const float l = (mixAL[i] * gainA + mixBL[i] * gainB) * m;
         const float r = (mixAR[i] * gainA + mixBR[i] * gainB) * m;
-        out[i * channels + 0] = std::max(-1.0f, std::min(1.0f, l));
-        out[i * channels + 1] = std::max(-1.0f, std::min(1.0f, r));
+        out[i * channels + 0] = sat(l);
+        out[i * channels + 1] = sat(r);
         for (int c = 2; c < channels; ++c) {
           out[i * channels + c] = 0.0f;
         }
       }
-    }
-    if (frames > n) {
-      std::fill(out + n * channels, out + frames * channels, 0.0f);
     }
   }
 
@@ -977,6 +1024,8 @@ int dj_get_output_channels(DjEngine engine) {
   return asEngine(engine)->engineChannels.load();
 }
 
+int dj_xrun_count(DjEngine engine) { return asEngine(engine)->xrunCount(); }
+
 int dj_load(DjEngine engine, int deck, const char* path) {
   return dj_load_with_analysis(engine, deck, path, 0.0f, -1, 0.0f);
 }
@@ -1028,7 +1077,6 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   }
   d.cache.hintEngineFrames(0, (int64_t)sr * 2);
 
-  std::vector<float> wmin, wmax;
   std::vector<uint8_t> bandDetail, bandOverview;
   TrackLevel level;
   {
@@ -1040,7 +1088,7 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
       }
       return 0;
     }
-    scanWaveform(scan, kWaveformBins, wmin, wmax, bandDetail, bandOverview, &level);
+    scanWaveform(scan, bandDetail, bandOverview, &level);
   }
 
   d.cache.waitChunk(0, 2500);
@@ -1058,8 +1106,6 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
   d.key = analysis.key;
   d.beatOffset = analysis.beatOffsetSec;
   d.gridConfidence = analysis.gridConfidence;
-  d.waveMin = std::move(wmin);
-  d.waveMax = std::move(wmax);
   d.bandDetail = std::move(bandDetail);
   d.bandOverview = std::move(bandOverview);
   d.level = level;
@@ -1130,8 +1176,6 @@ void dj_unload(DjEngine engine, int deck) {
     d.pendingLoopShift.store(false);
     d.gate = 0.0f;
     d.pauseXf = false;
-    d.waveMin.clear();
-    d.waveMax.clear();
     d.bandDetail.clear();
     d.bandOverview.clear();
     d.level = TrackLevel{};
@@ -1467,23 +1511,6 @@ void dj_beat_jump(DjEngine engine, int deck, int beats) {
   d.commitJumpTo(dest, d.loopEnabled, delta);
 }
 
-int dj_waveform_bins(void) { return kWaveformBins; }
-
-int dj_waveform_copy(DjEngine engine, int deck, float* min_out, float* max_out, int bins) {
-  if (deck < 0 || deck > 1 || !min_out || !max_out || bins <= 0) {
-    return 0;
-  }
-  Deck& d = asEngine(engine)->decks[deck];
-  std::lock_guard<std::mutex> lock(d.mutex);
-  const int n = std::min(bins, (int)d.waveMin.size());
-  if (n <= 0) {
-    return 0;
-  }
-  std::memcpy(min_out, d.waveMin.data(), sizeof(float) * n);
-  std::memcpy(max_out, d.waveMax.data(), sizeof(float) * n);
-  return n;
-}
-
 int dj_wave_bands_per_sec(void) { return wave_bands::kDetailPerSec; }
 
 int dj_wave_bands_columns(DjEngine engine, int deck, int overview) {
@@ -1522,6 +1549,8 @@ Java_es_manifold_sidedeck_UsbPlayer_usbRender(JNIEnv* env, jclass, jlong handle,
   if (buf == nullptr) {
     return;
   }
-  asEngine(reinterpret_cast<DjEngine>(handle))->renderInterleaved(buf, (int)frames, (int)channels);
+  // No clip here: UsbPlayer limits each deck's pair itself, after this.
+  asEngine(reinterpret_cast<DjEngine>(handle))
+      ->renderInterleaved(buf, (int)frames, (int)channels, false);
 }
 #endif

@@ -73,9 +73,6 @@ DJ_FFI_EXPORT double dj_get_hotcue(DjEngine engine, int deck, int index);
 DJ_FFI_EXPORT void dj_clear_hotcue(DjEngine engine, int deck, int index);
 DJ_FFI_EXPORT void dj_beat_jump(DjEngine engine, int deck, int beats);
 
-DJ_FFI_EXPORT int dj_waveform_bins(void);
-DJ_FFI_EXPORT int dj_waveform_copy(DjEngine engine, int deck, float* min_out, float* max_out, int bins);
-
 /** 3-band waveform: low/mid/high bytes (0..127) per column. overview=0: detail
  *  columns at dj_wave_bands_per_sec() per second; overview=1: fixed-count overview. */
 DJ_FFI_EXPORT int dj_wave_bands_per_sec(void);
@@ -92,6 +89,9 @@ DJ_FFI_EXPORT double dj_file_duration(const char* path);
 /** Load PCM and apply previously cached analysis (skips BPM/key). bpm<=0 runs a full analyze. */
 DJ_FFI_EXPORT int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm, int key,
                                         float beat_offset);
+
+/** Output underruns since the stream opened; -1 when unknown (USB mode, iOS). */
+DJ_FFI_EXPORT int dj_xrun_count(DjEngine engine);
 
 /** Null-terminated reason for the last failed dj_load / open, or "". */
 DJ_FFI_EXPORT const char* dj_last_error(void);

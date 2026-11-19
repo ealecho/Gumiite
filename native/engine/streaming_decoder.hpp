@@ -474,14 +474,11 @@ struct TrackLevel {
   float peakDb = -100.0f;
 };
 
-inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& waveMin,
-                         std::vector<float>& waveMax, std::vector<uint8_t>& bandDetail,
+inline void scanWaveform(StreamingDecoder& dec, std::vector<uint8_t>& bandDetail,
                          std::vector<uint8_t>& bandOverview, TrackLevel* level = nullptr) {
-  waveMin.assign((size_t)std::max(1, bins), 0.0f);
-  waveMax.assign((size_t)std::max(1, bins), 0.0f);
   bandDetail.clear();
   bandOverview.clear();
-  if (dec.totalFrames == 0 || bins < 1) {
+  if (dec.totalFrames == 0) {
     return;
   }
   wave_bands::Scanner bands(dec.sampleRate, dec.totalFrames);
@@ -500,13 +497,9 @@ inline void scanWaveform(StreamingDecoder& dec, int bins, std::vector<float>& wa
       break;
     }
     for (uint64_t i = 0; i < got; ++i) {
-      const int b = (int)std::min((int64_t)bins - 1,
-                                    (int64_t)((pos + i) * (uint64_t)bins / dec.totalFrames));
       const float l = buf[(size_t)i * 2];
       const float r = buf[(size_t)i * 2 + 1];
       const float s = 0.5f * (l + r);
-      waveMin[(size_t)b] = std::min(waveMin[(size_t)b], s);
-      waveMax[(size_t)b] = std::max(waveMax[(size_t)b], s);
       bands.push(l, r);
       peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
       blockAcc += (double)s * (double)s;

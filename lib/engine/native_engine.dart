@@ -42,13 +42,6 @@ typedef _GetHotcueC = Double Function(Pointer<Void>, Int32, Int32);
 typedef _WaveBinsC = Int32 Function();
 typedef _BandColumnsC = Int32 Function(Pointer<Void>, Int32, Int32);
 typedef _BandCopyC = Int32 Function(Pointer<Void>, Int32, Int32, Pointer<Uint8>, Int32);
-typedef _WaveCopyC = Int32 Function(
-  Pointer<Void>,
-  Int32,
-  Pointer<Float>,
-  Pointer<Float>,
-  Int32,
-);
 
 class NativeEngine {
   NativeEngine._(this._lib, this._handle);
@@ -72,6 +65,9 @@ class NativeEngine {
       );
   late final _getChannels = _lib.lookupFunction<_GetIntC, int Function(Pointer<Void>)>(
     'dj_get_output_channels',
+  );
+  late final _xrunCount = _lib.lookupFunction<_GetIntC, int Function(Pointer<Void>)>(
+    'dj_xrun_count',
   );
   late final _load = _lib
       .lookupFunction<_LoadC, int Function(Pointer<Void>, int, Pointer<Utf8>)>(
@@ -180,20 +176,6 @@ class NativeEngine {
       .lookupFunction<_BeatJumpC, void Function(Pointer<Void>, int, int)>(
         'dj_beat_jump',
       );
-  late final _waveBins = _lib.lookupFunction<_WaveBinsC, int Function()>(
-    'dj_waveform_bins',
-  );
-  late final _waveCopy = _lib
-      .lookupFunction<
-        _WaveCopyC,
-        int Function(
-          Pointer<Void>,
-          int,
-          Pointer<Float>,
-          Pointer<Float>,
-          int,
-        )
-      >('dj_waveform_copy');
   late final _bandsPerSec = _lib.lookupFunction<_WaveBinsC, int Function()>(
     'dj_wave_bands_per_sec',
   );
@@ -243,6 +225,10 @@ class NativeEngine {
   }
 
   int get outputChannels => _getChannels(_handle);
+
+  /// Output underruns since the internal stream opened; -1 when unknown
+  /// (USB mode, where UsbPlayer logs its own, and iOS).
+  int get xrunCount => _xrunCount(_handle);
   int get nativeHandle => _handle.address;
 
   bool load(
@@ -339,22 +325,6 @@ class NativeEngine {
   double loopStart(int deck) => _loopStart(_handle, deck);
   double loopEnd(int deck) => _loopEnd(_handle, deck);
   void beatJump(int deck, int beats) => _beatJump(_handle, deck, beats);
-
-  ({Float32List min, Float32List max}) waveform(int deck) {
-    final bins = _waveBins();
-    final minPtr = malloc<Float>(bins);
-    final maxPtr = malloc<Float>(bins);
-    try {
-      final n = _waveCopy(_handle, deck, minPtr, maxPtr, bins);
-      return (
-        min: Float32List.fromList(minPtr.asTypedList(n)),
-        max: Float32List.fromList(maxPtr.asTypedList(n)),
-      );
-    } finally {
-      malloc.free(minPtr);
-      malloc.free(maxPtr);
-    }
-  }
 
   /// Detail columns per second of track in [waveBands] (overview: false).
   int get waveBandsPerSec => _bandsPerSec();

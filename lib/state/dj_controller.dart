@@ -60,8 +60,6 @@ class DeckState {
   double eqLow = 0;
   double eqMid = 0;
   double eqHigh = 0;
-  Float32List waveMin = Float32List(0);
-  Float32List waveMax = Float32List(0);
 
   /// 3-band waveform (low/mid/high bytes per column); see NativeEngine.waveBands.
   Uint8List bandDetail = Uint8List(0);
@@ -608,6 +606,25 @@ class DjController extends ChangeNotifier {
       dirty = true;
     }
     if (dirty) notifyListeners();
+    if (++_xrunTicks >= 40) {
+      _xrunTicks = 0;
+      _checkXruns();
+    }
+  }
+
+  int _xrunTicks = 0;
+  int _xrunsSeen = 0;
+
+  /// Logs audio dropouts on the phone's own output every ~2 s, so a glitch
+  /// heard mid-set can be matched in logcat. USB mode logs its own.
+  void _checkXruns() {
+    final n = _engine.xrunCount;
+    if (n < 0) return;
+    if (n < _xrunsSeen) _xrunsSeen = 0; // stream reopened
+    if (n > _xrunsSeen) {
+      debugPrint('audio: underrun x${n - _xrunsSeen} (total $n since the stream opened)');
+      _xrunsSeen = n;
+    }
   }
 
   /// Loads [path] onto a deck. [path] is the track's identity (cues, analysis,
@@ -620,6 +637,7 @@ class DjController extends ChangeNotifier {
     String? artist,
     String? openPath,
   }) async {
+    _dropPendingSeek(deckIndex);
     loadingDeck = deckIndex;
     loadingTitle = title ?? path.split(RegExp(r'[\\/]')).last;
     loadingPath = path;
@@ -689,9 +707,6 @@ class DjController extends ChangeNotifier {
     d.loopEnabled = false;
     d.loopStart = 0;
     d.loopEnd = 0;
-    final wave = _engine.waveform(deckIndex);
-    d.waveMin = wave.min;
-    d.waveMax = wave.max;
     d.bandDetail = _engine.waveBands(deckIndex, overview: false);
     d.bandOverview = _engine.waveBands(deckIndex, overview: true);
     d.bandsPerSec = _engine.waveBandsPerSec;
@@ -839,6 +854,7 @@ class DjController extends ChangeNotifier {
   /// the cue point: preview from it while held. Paused elsewhere: set the cue
   /// point here (drag the waveform to find the spot first).
   void cueDown(int deckIndex) {
+    _dropPendingSeek(deckIndex);
     final d = deck(deckIndex);
     if (!d.loaded) return;
     if (d.playing) {
@@ -866,6 +882,7 @@ class DjController extends ChangeNotifier {
 
   /// CUE release: ends a preview by returning to the cue point.
   void cueUp(int deckIndex) {
+    _dropPendingSeek(deckIndex);
     final d = deck(deckIndex);
     if (!d.cuePreview) return;
     d.cuePreview = false;
@@ -879,6 +896,7 @@ class DjController extends ChangeNotifier {
   /// Hot cue pad: an empty slot stores the playhead; a set slot jumps to it,
   /// keeping the deck playing or paused as it was.
   void hotCue(int deckIndex, int slot) {
+    _dropPendingSeek(deckIndex);
     final d = deck(deckIndex);
     if (!d.loaded) return;
     if (d.hotCues[slot] < 0) {
@@ -916,15 +934,49 @@ class DjController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Absolute seek (waveform scrub, overview, pause nudge).
+  /// Absolute seek (waveform scrub, overview tap or drag).
+  ///
+  /// A drag calls this on every pointer move, up to 120 times a second. On a
+  /// playing keylock deck each engine seek re-primes the time-stretcher inside
+  /// the audio callback, so the engine gets at most one seek per [_seekGap];
+  /// the screen follows the finger every time and the last position always
+  /// lands.
   void seekTo(int deckIndex, double seconds) {
     final d = deck(deckIndex);
     if (!d.loaded) return;
     final target = seconds.clamp(0.0, math.max(0.0, d.duration)).toDouble();
-    _engine.seek(deckIndex, target);
     d.position = target;
-    _readLoop(deckIndex);
+    _seekTarget[deckIndex] = target;
+    final since = _clock.elapsed - _lastSeek[deckIndex];
+    if (since >= _seekGap) {
+      _seekTrail[deckIndex]?.cancel();
+      _seekTrail[deckIndex] = null;
+      _sendSeek(deckIndex);
+    } else {
+      _seekTrail[deckIndex] ??= Timer(_seekGap - since, () {
+        _seekTrail[deckIndex] = null;
+        _sendSeek(deckIndex);
+      });
+    }
     notifyListeners();
+  }
+
+  static const _seekGap = Duration(milliseconds: 40);
+  final List<Duration> _lastSeek = [-_seekGap, -_seekGap];
+  final List<double> _seekTarget = [0, 0];
+  final List<Timer?> _seekTrail = [null, null];
+
+  void _sendSeek(int deckIndex) {
+    _lastSeek[deckIndex] = _clock.elapsed;
+    if (!deck(deckIndex).loaded) return;
+    _engine.seek(deckIndex, _seekTarget[deckIndex]);
+    _readLoop(deckIndex);
+  }
+
+  /// A scrub seek still waiting must not land on top of a load or jump.
+  void _dropPendingSeek(int deckIndex) {
+    _seekTrail[deckIndex]?.cancel();
+    _seekTrail[deckIndex] = null;
   }
 
   void setGain(int deckIndex, double v) {
@@ -1031,6 +1083,7 @@ class DjController extends ChangeNotifier {
   }
 
   void _jogPaused(int deckIndex, {required bool faster}) {
+    _dropPendingSeek(deckIndex);
     final d = deck(deckIndex);
     if (!d.loaded || d.playing) return;
     const step = 0.04; // 40 ms — visible on the 8 s zoom window, still fine
@@ -1120,6 +1173,7 @@ class DjController extends ChangeNotifier {
   }
 
   void beatJump(int deckIndex, int beats) {
+    _dropPendingSeek(deckIndex);
     _engine.beatJump(deckIndex, beats);
     deck(deckIndex).position = _engine.position(deckIndex);
     _readLoop(deckIndex);
@@ -1168,6 +1222,7 @@ class DjController extends ChangeNotifier {
   /// the beat matches the other deck's. Both grids come from analysis (BPM
   /// and first-beat offset, in file seconds), so each uses its own period.
   void _alignPhase(int slave) {
+    _dropPendingSeek(slave);
     final s = deck(slave);
     final m = deck(1 - slave);
     if (!s.loaded || !m.loaded || s.bpm <= 1 || m.bpm <= 1) return;
@@ -1394,6 +1449,8 @@ class DjController extends ChangeNotifier {
     // Save a take still running when the app closes.
     if (recording) MixRecorder.stop();
     _ticker.cancel();
+    _dropPendingSeek(0);
+    _dropPendingSeek(1);
     _nudgeHold[0]?.cancel();
     _nudgeHold[1]?.cancel();
     UsbOutput.stopPlayback();

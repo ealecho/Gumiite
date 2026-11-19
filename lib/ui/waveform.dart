@@ -752,28 +752,32 @@ class _WaveformViewState extends State<WaveformView> with SingleTickerProviderSt
         final h = constraints.maxHeight.isFinite && constraints.maxHeight > 0
             ? constraints.maxHeight
             : 88.0;
-        final paint = CustomPaint(
-          painter: WaveformPainter(
-            part: w0.part,
-            detail: w0.detail,
-            overview: w0.overview,
-            columnsPerSec: w0.columnsPerSec,
-            position: w0.playing ? _shown : w0.position,
-            duration: w0.duration,
-            hangDown: w0.hangDown,
-            beatOffset: w0.beatOffset,
-            bpm: w0.bpm,
-            rate: w0.rate,
-            loopEnabled: w0.loopEnabled,
-            loopStart: w0.loopStart,
-            loopEnd: w0.loopEnd,
-            cuePoint: w0.cuePoint,
-            hotCues: w0.hotCues,
-            zoomWindowSec: w0.zoom,
-            sections: w0.sections,
-            fullWave: w0.fullWave,
+        // Its own layer: while playing this repaints every frame, and
+        // without the boundary every frame would repaint the whole screen.
+        final paint = RepaintBoundary(
+          child: CustomPaint(
+            painter: WaveformPainter(
+              part: w0.part,
+              detail: w0.detail,
+              overview: w0.overview,
+              columnsPerSec: w0.columnsPerSec,
+              position: w0.playing ? _shown : w0.position,
+              duration: w0.duration,
+              hangDown: w0.hangDown,
+              beatOffset: w0.beatOffset,
+              bpm: w0.bpm,
+              rate: w0.rate,
+              loopEnabled: w0.loopEnabled,
+              loopStart: w0.loopStart,
+              loopEnd: w0.loopEnd,
+              cuePoint: w0.cuePoint,
+              hotCues: w0.hotCues,
+              zoomWindowSec: w0.zoom,
+              sections: w0.sections,
+              fullWave: w0.fullWave,
+            ),
+            size: Size(w, h),
           ),
-          size: Size(w, h),
         );
         final interactive = w0.onOverviewSeek != null || w0.onScrub != null || w0.onZoom != null;
         if (!interactive || w0.duration <= 0) {

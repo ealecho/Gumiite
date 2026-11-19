@@ -157,8 +157,9 @@ struct ChunkCache {
 
   // Prefetch several spans at once. The audio thread re-hints every anchor on
   // every buffer, so it takes the locks once for the batch rather than once
-  // per anchor.
-  void hintEngineSpans(const Span* spans, int n, bool urgent = false) {
+  // per anchor. With `tryOnly` (the audio thread) a busy lock skips the batch
+  // instead of waiting: the same hints come again on the next buffer.
+  void hintEngineSpans(const Span* spans, int n, bool urgent = false, bool tryOnly = false) {
     const int64_t total = nativeFrames_.load();
     if (!spans || n < 1 || total <= 0) {
       return;
@@ -166,8 +167,16 @@ struct ChunkCache {
     const double ratio = nativeRatio();
     bool wake = false;
     {
-      std::lock_guard<std::mutex> work(workMu_);
-      std::lock_guard<std::mutex> cached(cacheMu_);
+      std::unique_lock<std::mutex> work(workMu_, std::defer_lock);
+      std::unique_lock<std::mutex> cached(cacheMu_, std::defer_lock);
+      if (tryOnly) {
+        if (!work.try_lock() || !cached.try_lock()) {
+          return;
+        }
+      } else {
+        work.lock();
+        cached.lock();
+      }
       for (int i = 0; i < n; ++i) {
         if (spans[i].count <= 0) {
           continue;
