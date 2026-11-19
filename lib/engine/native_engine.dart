@@ -1,4 +1,5 @@
 import 'dart:ffi';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -257,6 +258,28 @@ class NativeEngine {
     }
   }
 
+  /// [load] on a worker isolate, so the decode and analysis (1-4 s on a
+  /// phone) never freeze the UI. The reason for a failure comes back with
+  /// the result: the engine keeps it per thread, so [lastError] on the UI
+  /// thread would not see it.
+  Future<({bool ok, String error})> loadOffUi(
+    int deck,
+    String path, {
+    double? bpm,
+    int? key,
+    double? beatOffset,
+  }) {
+    final job = _offUiLoad(
+      _handle.address,
+      deck,
+      path,
+      bpm != null && bpm > 1 ? bpm : 0,
+      key ?? -1,
+      beatOffset ?? 0,
+    );
+    return Isolate.run(job).catchError((Object _) => job());
+  }
+
   /// Reason for the last failed [load], or empty if none / success.
   String lastError() {
     final ptr = _lastError();
@@ -341,4 +364,35 @@ class NativeEngine {
       malloc.free(ptr);
     }
   }
+}
+
+/// Built at top level so the isolate closure only captures plain values,
+/// not the engine object (which holds a DynamicLibrary that can't be sent).
+({bool ok, String error}) Function() _offUiLoad(
+  int handle,
+  int deck,
+  String path,
+  double bpm,
+  int key,
+  double beatOffset,
+) {
+  return () {
+    final lib = openDjEngine();
+    final load = lib.lookupFunction<
+      _LoadAnalyzedC,
+      int Function(Pointer<Void>, int, Pointer<Utf8>, double, int, double)
+    >('dj_load_with_analysis');
+    final lastError = lib.lookupFunction<_LastErrorC, Pointer<Utf8> Function()>(
+      'dj_last_error',
+    );
+    final p = path.toNativeUtf8();
+    try {
+      // bpm 0 runs the full analysis, as dj_load does.
+      final ok = load(Pointer.fromAddress(handle), deck, p, bpm, key, beatOffset) == 1;
+      final err = lastError();
+      return (ok: ok, error: ok || err == nullptr ? '' : err.toDartString());
+    } finally {
+      malloc.free(p);
+    }
+  };
 }

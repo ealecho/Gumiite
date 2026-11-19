@@ -630,7 +630,32 @@ class DjController extends ChangeNotifier {
   /// Loads [path] onto a deck. [path] is the track's identity (cues, analysis,
   /// library); [openPath], when given, is the file the engine actually opens,
   /// e.g. a cached copy of a USB stick track Android won't open by path.
+  ///
+  /// The engine load runs off the UI thread, so the screen and the other
+  /// deck keep moving. A second load onto a deck that is still loading is
+  /// refused (returns false).
   Future<bool> loadFile(
+    int deckIndex,
+    String path, {
+    String? title,
+    String? artist,
+    String? openPath,
+  }) async {
+    if (!_loadingDecks.add(deckIndex)) return false;
+    try {
+      return await _loadFile(deckIndex, path, title: title, artist: artist, openPath: openPath);
+    } finally {
+      _loadingDecks.remove(deckIndex);
+      notifyListeners(); // the deck's controls come back
+    }
+  }
+
+  final Set<int> _loadingDecks = {};
+
+  /// True while a track is loading onto [deckIndex]; its controls are off.
+  bool isLoading(int deckIndex) => _loadingDecks.contains(deckIndex);
+
+  Future<bool> _loadFile(
     int deckIndex,
     String path, {
     String? title,
@@ -658,20 +683,21 @@ class DjController extends ChangeNotifier {
       } catch (_) {}
     }
 
-    final ok = _engine.load(
+    final result = await _engine.loadOffUi(
       deckIndex,
       openPath ?? path,
       bpm: cached?.bpm,
       key: cached?.key,
       beatOffset: cached?.beatOffset,
     );
+    final ok = result.ok;
     final d = deck(deckIndex);
     if (!ok) {
       loadingDeck = null;
       loadingTitle = null;
       loadingPath = null;
       final name = title ?? path.split(RegExp(r'[\\/]')).last;
-      final detail = _engine.lastError();
+      final detail = result.error;
       engineError = detail.isNotEmpty
           ? 'Could not load $name - $detail'
           : 'Could not decode $name (need MP3, WAV, FLAC, Opus, Ogg Vorbis, or AAC M4A).';

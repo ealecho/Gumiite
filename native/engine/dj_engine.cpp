@@ -407,6 +407,10 @@ struct Engine : public oboe::AudioStreamDataCallback,
 struct Engine {
 #endif
   std::mutex streamMutex;
+  // Held for a whole dj_load (which runs on a worker thread) and for a
+  // sample-rate change, so a stream reopen mid-load cannot leave the new
+  // track opened at the old rate. Never taken on the audio thread.
+  std::mutex loadMutex;
 #ifdef __ANDROID__
   std::shared_ptr<oboe::AudioStream> stream;
 #elif defined(__APPLE__)
@@ -455,6 +459,7 @@ struct Engine {
   }
 
   void applyLoadedDeckSampleRate(int newSr) {
+    std::lock_guard<std::mutex> loading(loadMutex);
     for (auto& d : decks) {
       std::string path;
       double playhead = 0;
@@ -1038,6 +1043,8 @@ int dj_load_with_analysis(DjEngine engine, int deck, const char* path, float bpm
     return 0;
   }
   auto* e = asEngine(engine);
+  // Loads run off the UI thread; see Engine::loadMutex.
+  std::lock_guard<std::mutex> loading(e->loadMutex);
   const int sr = e->engineSampleRate.load();
 
   AnalysisResult analysis;

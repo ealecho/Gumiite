@@ -315,6 +315,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _deck(int i, bool portrait) {
+    // Loading runs in the background now, so the deck stays on screen; its
+    // controls would act on the outgoing track, so they are off until done.
+    return IgnorePointer(
+      ignoring: _djReady.isLoading(i),
+      child: _deckPanel(i, portrait),
+    );
+  }
+
+  Widget _deckPanel(int i, bool portrait) {
     return DeckPanel(
       controller: _djReady,
       index: i,
