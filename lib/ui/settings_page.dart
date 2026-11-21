@@ -527,11 +527,12 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'SideDeck 1.1.0\n'
-            'Copyright © 2026 SideDeck contributors\n\n'
+            'Gumiite 1.1.0\n'
+            'Based on SideDeck by manueljpy (github.com/manueljpy/SideDeck).\n'
+            'Copyright © 2026 SideDeck and Gumiite contributors\n\n'
             'This program is free software under the GNU GPL v3 or later. '
             'There is no warranty.\n\n'
-            'Support & issues: github.com/manueljpy/SideDeck',
+            'Support & issues: github.com/ealecho/Gumiite',
             style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 12),
@@ -539,10 +540,11 @@ class _SettingsPageState extends State<SettingsPage> {
             onPressed: () {
               showLicensePage(
                 context: context,
-                applicationName: 'SideDeck',
+                applicationName: 'Gumiite',
                 applicationVersion: '1.1.0',
                 applicationLegalese:
-                    'Copyright © 2026 SideDeck contributors\n\n'
+                    'Based on SideDeck by manueljpy.\n'
+                    'Copyright © 2026 SideDeck and Gumiite contributors\n\n'
                     'GNU GPL v3 or later. See LICENSE and NOTICE in the '
                     'source repository.',
               );
