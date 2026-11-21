@@ -12,7 +12,11 @@ enum SdLook {
   paper('Paper'),
 
   /// Paper's dark variant: black paper, white ink, the same orange.
-  ink('Ink');
+  ink('Ink'),
+
+  /// After a club player's screen: a black screen in charcoal chrome,
+  /// readouts in thin boxes, orange when lit, yellow loops, red playhead.
+  booth('Booth');
 
   const SdLook(this.label);
   final String label;
@@ -22,6 +26,10 @@ enum SdLook {
 class SdPalette {
   const SdPalette({
     required this.flat,
+    this.booth = false,
+    this.quantizeLit,
+    this.loopLit,
+    this.boxEdge = const Color(0x00000000),
     required this.dark,
     required this.bg,
     required this.panel,
@@ -73,6 +81,15 @@ class SdPalette {
 
   /// fm1 style: no gradients, no shadows, ink/dim waveforms.
   final bool flat;
+
+  /// Booth style: boxed readouts, rimmed flat buttons, hot cue strips.
+  final bool booth;
+
+  /// Lit Q and loop buttons; null = [deckLit].
+  final Color? quantizeLit, loopLit;
+
+  /// Booth: the rim of a readout box.
+  final Color boxEdge;
   final bool dark;
   final Color bg, panel, panelAlt, accentA, accentB, text, muted;
   final Color deckBg, deckRow, deckButton, deckText, deckDim, deckOutline;
@@ -288,10 +305,67 @@ class SdPalette {
     error: Color(0xFFFF6B6B),
   );
 
+  static const boothPalette = SdPalette(
+    flat: false,
+    booth: true,
+    dark: true,
+    bg: Color(0xFF111215),
+    panel: Color(0xFF18191D),
+    panelAlt: Color(0xFF222328),
+    accentA: Color(0xFF4FA3FF),
+    accentB: Color(0xFFFF8A1E),
+    text: Color(0xFFE9EAEE),
+    muted: Color(0xFF8D9099),
+    // A black screen for the waveforms, charcoal chrome round it.
+    deckBg: Color(0xFF000000),
+    deckRow: Color(0xFF1B1C20),
+    deckButton: Color(0xFF26272C),
+    deckText: Color(0xFFF2F2F2),
+    deckDim: Color(0xFF8D9099),
+    deckOutline: Color(0xFF55575E),
+    deckLit: Color(0xFFFF8A1E),
+    onLit: Color(0xFF000000),
+    litText: Color(0xFFFFB347),
+    quantizeLit: Color(0xFFE8202A),
+    loopLit: Color(0xFFFFD400),
+    boxEdge: Color(0xFF6E717A),
+    playRing: Color(0xFF1F6B3A),
+    playLit: Color(0xFF2BF07A),
+    wellFill: Color(0xFF0E0F11),
+    wellEdge: Color(0xFF3A3C42),
+    divider: Color(0xFF2E3036),
+    icon: Color(0xFFB8BBC4),
+    cueRing: Color(0xFFFF8A1E),
+    rec: Color(0xFFE8202A),
+    scrim: Color(0xCC000000),
+    rail: Color(0xFF0A0A0B),
+    notch: Color(0xFF9A9DA5),
+    tick: Color(0xFF44464C),
+    capFill: Color(0xFF4A4A4A),
+    capLine: Color(0xFFF0F0F0),
+    waveBg: Color(0xFF000000),
+    waveInk: Color(0xFFFFFFFF),
+    waveDim: Color(0xFF6B6B6B),
+    playhead: Color(0xFFE8202A),
+    beat: Color(0xFF333333),
+    beatHead: Color(0xFFD0D0D0),
+    downbeat: Color(0xFF8A8A8A),
+    downbeatHead: Color(0xFFE8202A),
+    cue: Color(0xFFFF8A1E),
+    loop: Color(0xFFFFD400),
+    loopAlpha: 0.28,
+    barLabel: Color(0xFFFFFFFF),
+    barRim: Color(0xFF5A5A5A),
+    barPlayed: Color(0xFFE8202A),
+    phraseText: Color(0xFF9A9A9A),
+    error: Color(0xFFFF6B6B),
+  );
+
   static SdPalette of(SdLook look) => switch (look) {
     SdLook.classic => classic,
     SdLook.paper => paper,
     SdLook.ink => ink,
+    SdLook.booth => boothPalette,
   };
 }
 
@@ -369,6 +443,11 @@ class SideDeckTheme {
   /// Text and icons on an unlit button face.
   static Color get buttonText => _p.flat ? _p.deckText : Colors.white;
 
+  /// Text on a lit or tinted face: Booth picks black or white by the face's
+  /// brightness (its lit colours run from yellow to red).
+  static Color onFace(Color face) =>
+      _p.booth ? (face.computeLuminance() > 0.3 ? Colors.black : Colors.white) : _p.onLit;
+
   // Depth for the classic deck controls: raised buttons lit from above,
   // recessed readouts and fader wells, so controls stand off the flat rows.
   static const _raisedTop = Color(0xFF3E3E3E);
@@ -379,11 +458,23 @@ class SideDeckTheme {
 
   /// A button face; [lit] glows blue (orange when flat), [tint] colours an
   /// "on" face (e.g. a set hot cue in its slot colour).
-  static BoxDecoration raised({bool lit = false, Color? tint, double radius = 3}) {
+  /// [litColor] lights a button its own way (Q, loop) in Paper, Ink and
+  /// Booth; Classic keeps blue.
+  static BoxDecoration raised({bool lit = false, Color? tint, Color? litColor, double radius = 3}) {
     if (_p.flat) {
       return BoxDecoration(
-        color: tint ?? (lit ? _p.deckLit : _p.deckButton),
+        color: tint ?? (lit ? (litColor ?? _p.deckLit) : _p.deckButton),
         borderRadius: BorderRadius.circular(2),
+      );
+    }
+    if (_p.booth) {
+      // Flat dark keys with a thin rim; lit ones filled in their colour.
+      final on = tint != null || lit;
+      final face = tint ?? (lit ? (litColor ?? _p.deckLit) : _p.deckButton);
+      return BoxDecoration(
+        color: face,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: on ? face : _p.wellEdge, width: 1),
       );
     }
     final Color top, bottom, edge;
@@ -437,14 +528,14 @@ class SideDeckTheme {
     final p = _p;
     final brightness = p.dark ? Brightness.dark : Brightness.light;
     final scheme = ColorScheme.fromSeed(
-      seedColor: p.flat ? p.deckLit : p.accentA,
+      seedColor: p.flat || p.booth ? p.deckLit : p.accentA,
       brightness: brightness,
     );
     final base = ThemeData(
       brightness: brightness,
       useMaterial3: true,
       fontFamily: bodyFont,
-      colorScheme: p.flat
+      colorScheme: p.flat || p.booth
           ? scheme.copyWith(
               primary: p.deckLit,
               onPrimary: p.onLit,
@@ -466,10 +557,10 @@ class SideDeckTheme {
     return base.copyWith(
       scaffoldBackgroundColor: p.bg,
       textTheme: base.textTheme.apply(bodyColor: p.text, displayColor: p.text),
-      appBarTheme: p.flat
+      appBarTheme: p.flat || p.booth
           ? AppBarTheme(backgroundColor: p.bg, foregroundColor: p.text, surfaceTintColor: Colors.transparent)
           : null,
-      dividerColor: p.flat ? p.divider : null,
+      dividerColor: p.flat || p.booth ? p.divider : null,
     );
   }
 }

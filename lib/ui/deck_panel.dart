@@ -227,7 +227,7 @@ class DeckPanel extends StatelessWidget {
           _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
           const SizedBox(width: 6),
           if (controller.showQuantizeButton) ...[
-            _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+            _railChip(label: 'Q', lit: d.quantize, litColor: SideDeckTheme.p.quantizeLit, onTap: () => controller.setQuantize(index, !d.quantize)),
             const SizedBox(width: 6),
           ],
           _railChip(label: 'KEY', lit: d.keylock, onTap: () => controller.setKeylock(index, !d.keylock)),
@@ -270,7 +270,7 @@ class DeckPanel extends StatelessWidget {
                 width: 9,
                 height: 9,
                 decoration: BoxDecoration(
-                  color: rec ? SideDeckTheme.p.onLit : _recRed,
+                  color: rec ? SideDeckTheme.onFace(_recRed) : _recRed,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -281,7 +281,7 @@ class DeckPanel extends StatelessWidget {
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                   height: 1,
-                  color: rec ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText,
+                  color: rec ? SideDeckTheme.onFace(_recRed) : SideDeckTheme.buttonText,
                 ),
               ),
             ],
@@ -450,7 +450,7 @@ class DeckPanel extends StatelessWidget {
               ),
               if (controller.showQuantizeButton) ...[
                 const SizedBox(height: 6),
-                _railChip(label: 'Q', lit: d.quantize, onTap: () => controller.setQuantize(index, !d.quantize)),
+                _railChip(label: 'Q', lit: d.quantize, litColor: SideDeckTheme.p.quantizeLit, onTap: () => controller.setQuantize(index, !d.quantize)),
               ],
               const SizedBox(height: 6),
               _railChip(label: '${d.jumpBeats}', onTap: () => controller.cycleJumpSize(index)),
@@ -477,16 +477,19 @@ class DeckPanel extends StatelessWidget {
     String? label,
     IconData? icon,
     bool lit = false,
+    Color? litColor,
     bool enabled = true,
     VoidCallback? onTap,
     VoidCallback? onStep,
   }) {
-    final fg = !enabled ? SideDeckTheme.deckOutline : (lit ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText);
+    final fg = !enabled
+        ? SideDeckTheme.deckOutline
+        : (lit ? SideDeckTheme.onFace(litColor ?? SideDeckTheme.deckLit) : SideDeckTheme.buttonText);
     final face = Container(
       width: 30,
       height: 24,
       alignment: Alignment.center,
-      decoration: SideDeckTheme.raised(lit: lit),
+      decoration: SideDeckTheme.raised(lit: lit, litColor: litColor),
       child: icon != null
           ? Icon(icon, size: 15, color: fg)
           : Text(
@@ -510,7 +513,7 @@ class DeckPanel extends StatelessWidget {
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: d.cuePreview ? ring : p.deckBg,
+        color: d.cuePreview ? ring : (p.booth ? p.deckButton : p.deckBg),
         shape: BoxShape.circle,
         border: Border.all(color: d.loaded ? ring : SideDeckTheme.deckOutline, width: 2),
       ),
@@ -521,7 +524,7 @@ class DeckPanel extends StatelessWidget {
           fontWeight: FontWeight.w800,
           color: !d.loaded
               ? SideDeckTheme.deckOutline
-              : (d.cuePreview ? (p.flat ? p.onLit : Colors.black) : SideDeckTheme.buttonText),
+              : (d.cuePreview ? (p.flat || p.booth ? p.onLit : Colors.black) : SideDeckTheme.buttonText),
         ),
       ),
     );
@@ -547,7 +550,7 @@ class DeckPanel extends StatelessWidget {
       glyph = lit ? Colors.white : const Color(0xFFB4B4B4);
     }
     return Material(
-      color: p.flat && lit ? p.playLit : p.deckBg,
+      color: p.flat && lit ? p.playLit : (p.booth ? p.deckButton : p.deckBg),
       shape: CircleBorder(
         side: BorderSide(
           color: !d.loaded && p.flat ? p.deckOutline : (lit ? p.playLit : p.playRing),
@@ -637,32 +640,51 @@ class DeckPanel extends StatelessWidget {
     final heard = d.bpm * d.rate;
     final pct = (d.rate - 1) * 100;
     final pctLabel = '${pct < -0.004 ? '−' : '+'}${pct.abs().toStringAsFixed(2)}%';
-    Widget sep() => Container(
-      width: 1,
-      height: 14,
-      margin: const EdgeInsets.symmetric(horizontal: 6),
-      color: SideDeckTheme.deckOutline,
-    );
+    final p = SideDeckTheme.p;
+    // Booth: each readout in its own thin box instead of rules between them.
+    Widget sep() => p.booth
+        ? const SizedBox(width: 4)
+        : Container(
+            width: 1,
+            height: 14,
+            margin: const EdgeInsets.symmetric(horizontal: 6),
+            color: SideDeckTheme.deckOutline,
+          );
+    Widget box(Widget child, {Color? edge}) => p.booth
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              border: Border.all(color: edge ?? p.boxEdge),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: child,
+          )
+        : child;
+    // Booth: a synced deck's tempo box goes orange.
+    final bpmLit = p.booth && d.synced && !d.gridUnsure;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _time(remaining, negative: true, color: SideDeckTheme.deckText),
+        box(_time(remaining, negative: true, color: SideDeckTheme.deckText)),
         sep(),
-        _time(d.position, color: SideDeckTheme.deckDim),
+        box(_time(d.position, color: SideDeckTheme.deckDim)),
         sep(),
         if (d.gridUnsure) ...[const GridWarningBadge(), const SizedBox(width: 4)],
-        _mono(
-          d.bpm > 1 ? heard.toStringAsFixed(2) : '—',
-          d.gridUnsure ? GridWarningBadge.colour : SideDeckTheme.deckText,
+        box(
+          _mono(
+            d.bpm > 1 ? heard.toStringAsFixed(2) : '—',
+            d.gridUnsure ? GridWarningBadge.colour : (bpmLit ? p.deckLit : SideDeckTheme.deckText),
+          ),
+          edge: bpmLit ? p.deckLit : null,
         ),
         sep(),
-        _mono(pctLabel, d.synced ? SideDeckTheme.deckLit : SideDeckTheme.deckDim),
+        box(_mono(pctLabel, d.synced ? SideDeckTheme.deckLit : SideDeckTheme.deckDim)),
         sep(),
-        _mono(formatKey(d.key), SideDeckTheme.deckText),
+        box(_mono(formatKey(d.key), SideDeckTheme.deckText)),
         // Auto gain at work: the level change applied to this track.
         if (controller.autoGain && d.autoGainDb.abs() >= 0.1) ...[
           sep(),
-          _mono('${d.autoGainDb > 0 ? '+' : '−'}${d.autoGainDb.abs().toStringAsFixed(1)} dB', SideDeckTheme.deckDim),
+          box(_mono('${d.autoGainDb > 0 ? '+' : '−'}${d.autoGainDb.abs().toStringAsFixed(1)} dB', SideDeckTheme.deckDim)),
         ],
       ],
     );
@@ -841,6 +863,41 @@ class _HotCuePad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colour = WaveformPainter.hotCueColours[slot % WaveformPainter.hotCueColours.length];
+    if (SideDeckTheme.p.booth) {
+      // A dark pad; once set, a strip in the slot colour under the letter.
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        onLongPress: set ? onClear : null,
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: SideDeckTheme.raised(),
+          child: Column(
+            children: [
+              Expanded(
+                child: Center(
+                  child: Text(
+                    WaveformPainter.hotCueLabel(slot),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      height: 1,
+                      color: set ? SideDeckTheme.deckText : SideDeckTheme.deckDim,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                height: 3,
+                margin: const EdgeInsets.fromLTRB(3, 0, 3, 3),
+                color: set ? colour : SideDeckTheme.p.wellEdge,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -957,7 +1014,9 @@ class _DeckButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final fg = !enabled
         ? SideDeckTheme.deckOutline
-        : (display && lit ? SideDeckTheme.p.litText : (lit ? SideDeckTheme.p.onLit : SideDeckTheme.buttonText));
+        : (display && lit
+              ? (SideDeckTheme.p.loopLit ?? SideDeckTheme.p.litText)
+              : (lit ? SideDeckTheme.onFace(SideDeckTheme.deckLit) : SideDeckTheme.buttonText));
     final Widget content;
     if (sub != null) {
       content = Column(
@@ -974,7 +1033,7 @@ class _DeckButton extends StatelessWidget {
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
               height: 1.1,
-              color: lit ? SideDeckTheme.p.onLit : SideDeckTheme.deckDim,
+              color: lit ? SideDeckTheme.onFace(SideDeckTheme.deckLit) : SideDeckTheme.deckDim,
             ),
           ),
         ],
@@ -995,7 +1054,9 @@ class _DeckButton extends StatelessWidget {
       // are raised.
       decoration: display
           ? SideDeckTheme.recessed(radius: 3).copyWith(
-              border: Border.all(color: lit ? SideDeckTheme.deckLit : SideDeckTheme.wellEdge),
+              border: Border.all(
+                color: lit ? (SideDeckTheme.p.loopLit ?? SideDeckTheme.deckLit) : SideDeckTheme.wellEdge,
+              ),
             )
           : SideDeckTheme.raised(lit: lit),
       child: content,

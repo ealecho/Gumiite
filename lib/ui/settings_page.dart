@@ -138,14 +138,20 @@ class _SettingsPageState extends State<SettingsPage> {
           Text(
             'Classic is the original dark deck. Paper and Ink are flat and '
             'minimal, after fm1-sampler: ink on paper (or white on black) with '
-            'one orange for whatever is live.',
+            'one orange for whatever is live. Booth is a club player\'s screen: '
+            'boxed readouts, orange when lit, yellow loops, a red playhead.',
             style: TextStyle(color: SideDeckTheme.muted, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 10),
           SegmentedButton<SdLook>(
             showSelectedIcon: false,
             segments: [
-              for (final l in SdLook.values) ButtonSegment(value: l, label: Text(l.label)),
+              // Four in a row: shrink a label rather than wrap it.
+              for (final l in SdLook.values)
+                ButtonSegment(
+                  value: l,
+                  label: FittedBox(fit: BoxFit.scaleDown, child: Text(l.label, maxLines: 1)),
+                ),
             ],
             selected: {SideDeckTheme.look.value},
             onSelectionChanged: (s) async {
