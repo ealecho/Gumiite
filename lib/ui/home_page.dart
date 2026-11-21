@@ -205,7 +205,7 @@ class _HomePageState extends State<HomePage> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: SelectableText(
-              'SideDeck failed to start\n\n$bootError',
+              'Gumiite failed to start\n\n$bootError',
               style: TextStyle(
                 color: SideDeckTheme.text,
                 fontSize: 13,

@@ -61,7 +61,7 @@ class SideDeckApp extends StatelessWidget {
     return ValueListenableBuilder<SdLook>(
       valueListenable: SideDeckTheme.look,
       builder: (context, look, home) => MaterialApp(
-        title: 'SideDeck',
+        title: 'Gumiite',
         debugShowCheckedModeBanner: false,
         theme: SideDeckTheme.theme(),
         home: home,
@@ -87,7 +87,7 @@ class _FatalApp extends StatelessWidget {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'SideDeck failed to start\n\n$message',
+              'Gumiite failed to start\n\n$message',
               style: TextStyle(
                 color: SideDeckTheme.text,
                 fontSize: 13,

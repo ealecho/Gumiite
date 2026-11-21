@@ -77,7 +77,7 @@ class SubsonicClient {
   final String username;
   final String password;
 
-  static const _clientName = 'SideDeck';
+  static const _clientName = 'Gumiite';
   static const _apiVersion = '1.16.1';
 
   Uri _uri(String endpoint, [Map<String, String>? extra]) {

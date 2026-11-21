@@ -19,7 +19,7 @@ class MixRecorder {
   /// `ok`, or `permission: true` when Android has just asked for the mic.
   static Future<Map<String, dynamic>> start() => _call('startRecording');
 
-  /// Stops and saves to Music/SideDeck: `name`, `where`, `seconds`, `gainDb`.
+  /// Stops and saves to Music/Gumiite: `name`, `where`, `seconds`, `gainDb`.
   static Future<Map<String, dynamic>> stop() => _call('stopRecording');
 
   /// `recording`, `seconds`, `error`.

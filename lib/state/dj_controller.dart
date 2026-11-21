@@ -144,13 +144,13 @@ class DjController extends ChangeNotifier {
   }
 
   // Mix recording: the USB mixer's return (its mix, effects included), saved
-  // to Music/SideDeck on stop. See MixRecorder.
+  // to Music/Gumiite on stop. See MixRecorder.
   bool recording = false;
   bool recordingSaving = false;
   double recordingSeconds = 0;
   Timer? _recordPoll;
 
-  /// Latest outcome to show once ("Saved SideDeck mix … to Music/SideDeck").
+  /// Latest outcome to show once ("Saved Gumiite mix … to Music/Gumiite").
   String? recordingMessage;
 
   void clearRecordingMessage() => recordingMessage = null;

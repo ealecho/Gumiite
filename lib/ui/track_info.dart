@@ -9,7 +9,7 @@ import 'package:sidedeck/state/dj_controller.dart';
 import 'package:sidedeck/theme/sidedeck_theme.dart';
 import 'package:sidedeck/ui/waveform.dart';
 
-/// Everything SideDeck knows about the track on a deck (tap its title).
+/// Everything Gumiite knows about the track on a deck (tap its title).
 Future<void> showTrackInfo(BuildContext context, DjController controller, int deckIndex) {
   return showDialog<void>(
     context: context,

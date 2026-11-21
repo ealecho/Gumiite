@@ -36,7 +36,7 @@ import kotlin.math.roundToInt
  * WAV in the app's cache (its header kept current, so a crash leaves a
  * usable file). On stop it is raised to just under full scale (the K.O.
  * sends it ~25-30 dB down), converted to 16-bit and saved as a WAV in
- * Music/SideDeck, then the temp file is deleted.
+ * Music/Gumiite, then the temp file is deleted.
  */
 object MixRecorder {
     private const val TAG = "sidedeck"
@@ -258,7 +258,7 @@ object MixRecorder {
         var pk = if (recovered) scanPeak(temp) else peak
         if (pk <= 1e-6f) pk = 1f
         val gain = min(MAX_GAIN, TARGET_PEAK / pk)
-        val name = "SideDeck mix " +
+        val name = "Gumiite mix " +
             SimpleDateFormat("yyyy-MM-dd HHmm", Locale.US).format(Date(temp.lastModified() - n * 1000 / rate)) +
             ".wav"
         return try {
@@ -324,24 +324,24 @@ object MixRecorder {
         }
     }
 
-    /** Music/SideDeck through MediaStore (Android 10+), else the app's Music folder. */
+    /** Music/Gumiite through MediaStore (Android 10+), else the app's Music folder. */
     private fun openOutput(context: Context, name: String): Triple<OutputStream, String, () -> Unit> {
         if (Build.VERSION.SDK_INT >= 29) {
             val values = ContentValues().apply {
                 put(MediaStore.Audio.Media.DISPLAY_NAME, name)
                 put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
-                put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/SideDeck")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/Gumiite")
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
             val resolver = context.contentResolver
             val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
                 ?: throw IllegalStateException("MediaStore refused the file")
             val os = resolver.openOutputStream(uri) ?: throw IllegalStateException("Cannot write $uri")
-            return Triple(os, "Music/SideDeck", {
+            return Triple(os, "Music/Gumiite", {
                 resolver.update(uri, ContentValues().apply { put(MediaStore.Audio.Media.IS_PENDING, 0) }, null, null)
             })
         }
-        val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "SideDeck").apply { mkdirs() }
+        val dir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "Gumiite").apply { mkdirs() }
         val f = File(dir, name)
         return Triple(f.outputStream(), dir.absolutePath, {})
     }
